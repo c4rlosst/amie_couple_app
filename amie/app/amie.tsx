@@ -51,8 +51,8 @@ export default function Amie({signedIn}:{signedIn:boolean}) {
   const days=data?.space?.anniversary?Math.max(1,Math.floor((Date.now()-new Date(data.space.anniversary+'T00:00:00').getTime())/86400000)+1):null;
   const nav=[{id:'home' as Tab,label:'Home',icon:House},{id:'messages' as Tab,label:'Messages',icon:MessageCircle},{id:'moments' as Tab,label:'Moments',icon:Images},{id:'us' as Tab,label:'Us',icon:Users}];
   return <div className="app-shell">
-    <aside className="sidebar"><a className="wordmark" href="/" aria-label="Amie home">amie</a><p className="brand-note">A little closer.</p><nav aria-label="Main navigation">{nav.map(item=><button className={tab===item.id?'active':''} key={item.id} onClick={()=>setTab(item.id)}><item.icon size={21}/>{item.label}{item.id==='messages'&&!!data?.messages.length&&<span className="nav-dot"/>}</button>)}</nav><div className="sidebar-bottom"><div className="tiny-pair"><Heart size={16}/><span>Just the two of you.</span></div><button className="text-button" onClick={()=>setModal('install')}><Download size={16}/> Add to Home Screen</button></div></aside>
-    <div className="main-shell"><header className="topbar"><a href="/" className="wordmark mobile-brand">amie</a><span className="desktop-topline">Amie</span><div className="topbar-actions"><span className={`connection ${error?'disconnected':''}`}><i/>{error?'Check connection':signedIn?'Private space':'Made for two'}</span><button className="icon-button" aria-label="Open settings" onClick={()=>setTab('us')}><Settings2 size={19}/></button></div></header>
+    <aside className="sidebar"><a className="wordmark" href="/" aria-label="Amie home"><img className="brand-logo" src="/favicon.svg" alt="" width="40" height="40" aria-hidden="true"/><span>amie</span></a><p className="brand-note">A little closer.</p><nav aria-label="Main navigation">{nav.map(item=><button className={tab===item.id?'active':''} key={item.id} onClick={()=>setTab(item.id)}><item.icon size={21}/>{item.label}{item.id==='messages'&&!!data?.messages.length&&<span className="nav-dot"/>}</button>)}</nav><div className="sidebar-bottom"><div className="tiny-pair"><Heart size={16}/><span>Just the two of you.</span></div><button className="text-button" onClick={()=>setModal('install')}><Download size={16}/> Add to Home Screen</button></div></aside>
+    <div className="main-shell"><header className="topbar"><a href="/" className="wordmark mobile-brand" aria-label="Amie home"><img className="brand-logo" src="/favicon.svg" alt="" width="40" height="40" aria-hidden="true"/><span>amie</span></a><span className="desktop-topline">Amie</span><div className="topbar-actions"><span className={`connection ${error?'disconnected':''}`}><i/>{error?'Check connection':signedIn?'Private space':'Made for two'}</span><button className="icon-button" aria-label="Open settings" onClick={()=>setTab('us')}><Settings2 size={19}/></button></div></header>
     <main id="main-content">
       <div className="page-heading"><div><p>{tab==='home'?`${greeting}${me?.name&&me.name!=='You'?`, ${me.name}`:''}`:tab==='messages'?'Stay in touch':tab==='moments'?'Shared with each other':'Your shared space'}</p><h1>{tab==='home'?'Today':tab==='messages'?'Messages':tab==='moments'?'Moments':'Us'}</h1></div><span className="date-label">{new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}</span></div>
       {error&&<div className="error-banner" role="alert"><span>{error}</span><button className="text-button" onClick={()=>run(refresh)}>Retry</button></div>}
@@ -80,7 +80,3 @@ export default function Amie({signedIn}:{signedIn:boolean}) {
     {error&&<p className="modal-error" role="alert">{error}</p>}</div></dialog>}
   </div>;
 }
-
-
-
-
