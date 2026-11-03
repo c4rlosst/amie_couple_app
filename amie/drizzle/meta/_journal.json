@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793719823705,
+      "tag": "0000_parched_annihilus",
+      "breakpoints": true
+    }
+  ]
+}
