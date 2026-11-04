@@ -3,7 +3,9 @@ import { useEffect, useState } from 'react';
 import { X, Heart, LoaderCircle } from 'lucide-react';
 import Amie from './amie';
 import { apiFetch, saveSession, sessionToken, assetUrl } from '../lib/client-api';
+import {useMobileViewport} from './use-mobile-viewport';
 export default function AccountShell(){
+  useMobileViewport();
   const [signedIn,setSignedIn]=useState(false);const [ready,setReady]=useState(false);const [open,setOpen]=useState(false);const [register,setRegister]=useState(false);
   const [name,setName]=useState('');const [username,setUsername]=useState('');const [password,setPassword]=useState('');const [error,setError]=useState('');const [busy,setBusy]=useState(false);
   useEffect(()=>{if(!sessionToken()){setReady(true);return;}apiFetch('/api/auth').then(async res=>{if(res.ok)setSignedIn(true);else if(res.status===401)saveSession(null);}).catch(()=>{}).finally(()=>setReady(true));},[]);
