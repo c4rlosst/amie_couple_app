@@ -1,6 +1,6 @@
 import { allowedRequest } from './account-auth.ts';
 type Bindings = { DB?: D1Database; BUCKET?: R2Bucket };
-type Member = { id: string; space_id: string | null; name: string; mood: string; status: string; status_at: number; last_seen: number; latitude: number | null; longitude: number | null; accuracy: number | null; location_at: number | null };
+type Member = { id: string; space_id: string | null; name: string; mood: string; status: string; status_at: number; last_seen: number; latitude: number | null; longitude: number | null; accuracy: number | null; location_at: number | null; avatar_version:string|null };
 class Problem extends Error { status: number; constructor(status: number, message: string) { super(message); this.status=status; } }
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: {'Cache-Control':'no-store'} });
 function check(value: unknown, message: string): asserts value { if (!value) throw new Problem(400, message); }
@@ -33,14 +33,25 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
     sameOrigin(request);
     if (Number(request.headers.get('content-length')||0) > 9*1024*1024) throw new Problem(413,'Choose a photo smaller than 8 MB.');
     if (request.headers.get('content-type')?.includes('multipart/form-data')) {
-      const me = await requireMember(db,uid);
       if (!env.BUCKET) throw new Problem(503,'Photo storage is not connected yet.');
       const form = await request.formData(); const file = form.get('photo');
+      const avatar = form.get('purpose') === 'avatar';
+      const me = avatar ? (await member(db,uid))! : await requireMember(db,uid);
       check(file instanceof File && file.size > 0 && file.size <= 8*1024*1024,'Choose a photo smaller than 8 MB.');
       const photo = file as File; const bytes = new Uint8Array(await photo.arrayBuffer());
       const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
       const png = [137,80,78,71,13,10,26,10].every((b,i)=>bytes[i]===b);
       check(jpeg || png,'Please choose a JPEG or PNG photo.');
+      if(avatar){
+        const version=crypto.randomUUID();const key=`avatars/${uid}/${version}`;
+        await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:jpeg?'image/jpeg':'image/png'}});
+        try {
+          const changed=await db.prepare('UPDATE members SET avatar_version=? WHERE id=? AND avatar_version IS ?').bind(version,uid,me.avatar_version).run();
+          check(changed.meta.changes===1,'Your profile changed. Please try again.');
+        } catch(error){await env.BUCKET.delete(key);throw error;}
+        if(me.avatar_version)await env.BUCKET.delete(`avatars/${uid}/${me.avatar_version}`).catch(()=>console.warn('Old profile photo cleanup deferred'));
+        return json({ok:true});
+      }
       const id = crypto.randomUUID(); const key = `${me.space_id}/${id}`; const mime = jpeg ? 'image/jpeg' : 'image/png';
       await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:mime}});
       try { await db.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,file_key,mime,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(id,me.space_id,uid,'photo',text(form.get('caption'),1000),key,mime,now).run(); }
@@ -49,6 +60,12 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
     }
     const body = await request.json() as Record<string,unknown>;
     const action = body.action;
+    if(action==='remove-avatar'){
+      const me=(await member(db,uid))!;
+      await db.prepare('UPDATE members SET avatar_version=NULL WHERE id=? AND avatar_version IS ?').bind(uid,me.avatar_version).run();
+      if(me.avatar_version&&env.BUCKET)await env.BUCKET.delete(`avatars/${uid}/${me.avatar_version}`).catch(()=>console.warn('Old profile photo cleanup deferred'));
+      return json({ok:true});
+    }
     if (action === 'create') {
       const me = (await member(db,uid))!;
       check(!me.space_id,'You already have a space.'); const name = text(body.name,40); check(name,'Add your name first.');
@@ -121,4 +138,13 @@ export async function getPhoto(env: Bindings, uid: string | null, id: string): P
   const file = await env.BUCKET.get(row.file_key);
   if (!file) return new Response('Photo not found',{status:404});
   return new Response(file.body,{headers:{'Content-Type':row.mime,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}});
+}
+
+export async function getAvatar(env:Bindings,uid:string|null,id:string):Promise<Response>{
+  if(!uid)return json({error:'Sign in to view this profile photo.'},401);
+  const row=await database(env).prepare('SELECT target.avatar_version FROM members target JOIN members viewer ON viewer.id=? WHERE target.id=? AND (target.id=viewer.id OR (target.space_id IS NOT NULL AND target.space_id=viewer.space_id))').bind(uid,id).first<{avatar_version:string|null}>();
+  if(!row?.avatar_version||!env.BUCKET)return new Response('Photo not found',{status:404});
+  const file=await env.BUCKET.get(`avatars/${id}/${row.avatar_version}`);
+  if(!file)return new Response('Photo not found',{status:404});
+  return new Response(file.body,{headers:{'Content-Type':file.httpMetadata?.contentType||'image/jpeg','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; sandbox"}});
 }

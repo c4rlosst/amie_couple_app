@@ -14,6 +14,7 @@ export const spaces = sqliteTable('spaces', {
 });
 export const members = sqliteTable('members', {
   id: text('id').primaryKey(), spaceId: text('space_id').references(() => spaces.id), name: text('name').notNull(),
+  avatarVersion: text('avatar_version'),
   mood: text('mood').notNull().default('okay'), status: text('status').notNull().default('around'),
   statusAt: integer('status_at').notNull(), lastSeen: integer('last_seen').notNull(),
   latitude: real('latitude'), longitude: real('longitude'), accuracy: real('accuracy'), locationAt: integer('location_at'),

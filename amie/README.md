@@ -8,7 +8,7 @@ A mobile-first couple web app for iPhone Safari and the Home Screen. Built with 
 - Messages and photo moments shared across devices, refreshed every 10 seconds while visible.
 - Mood check-ins, manual bedtime status and last-seen-in-Amie timestamps.
 - Opt-in location sharing while the page is open. Stopping sharing removes the stored coordinates. Every location includes its age and accuracy.
-- Anniversary date, profile names, iPhone Home Screen installation and an offline reconnect screen.
+- Private profile photos, anniversary date, profile names, iPhone Home Screen installation and an offline reconnect screen.
 
 No invented messages or locations are seeded in production. Location sharing does not start automatically. Photo uploads are resized and re-encoded in the browser, removing original metadata. Messages and photos are access-controlled but are not end-to-end encrypted.
 

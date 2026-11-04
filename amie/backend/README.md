@@ -21,13 +21,17 @@ node node_modules/wrangler/bin/wrangler.js deploy --config wrangler.backend.json
 
 Set `API_ORIGIN` in `lib/client-api.ts` to the returned HTTPS Worker origin, run checks, and push to GitHub. The Pages workflow rebuilds the frontend automatically.
 
-`GET /health` reports database and photo-storage availability. Registration and login use `/api/auth`; all shared records use `/api/amie`; private photo downloads use `/api/photos/:id`. CORS permits the GitHub Pages origin, while bearer authentication independently protects each operation.
+`GET /health` reports database and photo-storage availability. Registration and login use `/api/auth`; all shared records use `/api/amie`; private moment downloads use `/api/photos/:id`; profile photos use `/api/avatars/:memberId`. CORS permits the GitHub Pages origin, while bearer authentication independently protects each operation.
 
 ## Photos
 
 The existing Standard-class R2 bucket `amie-photos` is bound as `BUCKET` in `wrangler.backend.jsonc`. Its location hint is Asia-Pacific. Reuse this bucket when deploying; do not replace it or enable its public r2.dev URL/custom domains. The Worker checks pair membership before returning any photo.
 
 Storage is connected in production. Local integration tests cover uploads, file-type validation, partner retrieval, and rejection of anonymous/unrelated users. Read-only production checks confirm the binding is present and anonymous data/photo requests return 401; bucket checks confirm public access is disabled. Live uploads with disposable accounts were not performed.
+
+## Profile photos
+
+Migration `0002_profile_photos.sql` adds a nullable avatar version to each member. Signed-in people can upload their own profile photo before pairing. Multipart uploads with `purpose=avatar` always update the signed-in member; the server ignores client owner IDs. Profile-photo reads require the owner or their partner. Replacements/removals clean up the old private R2 object. Profile photos never appear as chat messages.
 
 ## Existing data
 

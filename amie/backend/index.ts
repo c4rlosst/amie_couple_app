@@ -1,5 +1,5 @@
 import { account, allowedRequest, authRoute, cors } from '../lib/account-auth.ts';
-import { getPhoto, handleAmie } from '../lib/service.ts';
+import { getPhoto, getAvatar, handleAmie } from '../lib/service.ts';
 
 export type BackendEnv = { DB?: D1Database; BUCKET?: R2Bucket };
 
@@ -23,11 +23,12 @@ export async function handleBackend(request:Request,env:BackendEnv):Promise<Resp
       const limited=await boundedJson(request);if(!limited)return reply({error:'This request is too large.'},413);request=limited;
     }
     if(path==='/api/auth')return authRoute(request,env);
-    if(path!=='/api/amie'&&!/^\/api\/photos\/[a-f0-9-]{36}$/.test(path))return reply({error:'Not found.'},404);
-    if(request.method!=='GET'&&path.startsWith('/api/photos/'))return reply({error:'Method not allowed.'},405);
+    if(path!=='/api/amie'&&!/^\/api\/(photos|avatars)\/[a-f0-9-]{36}$/.test(path))return reply({error:'Not found.'},404);
+    if(request.method!=='GET'&&/^\/api\/(photos|avatars)\//.test(path))return reply({error:'Method not allowed.'},405);
     if(!env.DB)return reply({error:'The database is unavailable. Please try again shortly.'},503);
     const user=await account(request,env);
     if(path==='/api/amie')return cors(request,await handleAmie(request,env,user?.id??null,user?.name??'You'));
+    if(path.startsWith('/api/avatars/'))return cors(request,await getAvatar(env,user?.id??null,path.slice('/api/avatars/'.length)));
     return cors(request,await getPhoto(env,user?.id??null,path.slice('/api/photos/'.length)));
   }catch(error){console.error('Amie API failed',error instanceof Error?error.message:'Unknown error');return reply({error:'The service is temporarily unavailable. Please try again.'},500);}
 }

@@ -9,7 +9,7 @@ test('standalone API accepts Pages preflight without allowing arbitrary origins'
   assert.equal(denied.status,403);assert.equal(denied.headers.get('access-control-allow-origin'),null);
 });
 test('shared-data and photo routes reject anonymous and spoofed platform identities',async()=>{
-  for(const path of ['/api/amie','/api/photos/11111111-1111-4111-8111-111111111111']){
+  for(const path of ['/api/amie','/api/photos/11111111-1111-4111-8111-111111111111','/api/avatars/11111111-1111-4111-8111-111111111111']){
     const result=await handleBackend(new Request(`https://amie-api.test${path}`,{headers:{'oai-authenticated-user-id':'fake-owner'}}),{DB:{}});
     assert.equal(result.status,401);
   }
