@@ -12,9 +12,21 @@ A mobile-first couple web app for iPhone Safari and the Home Screen. Built with 
 
 No invented messages or locations are seeded in production. Location sharing does not start automatically. Photo uploads are resized and re-encoded in the browser, removing original metadata. Messages and photos are access-controlled but are not end-to-end encrypted.
 
-## Access
+## Independent website and accounts
 
-The hosted site starts owner-only and uses the hosting platform’s ChatGPT sign-in. A partner must first be granted site access, then sign in with their own account and enter the invitation code. A code does not override hosting access. Do not make the site public to solve a pairing issue.
+Open **https://c4rlosst.github.io/couple_app/**. GitHub Pages serves the interface; the API uses Cloudflare Workers with D1 and R2. No ChatGPT account is required.
+
+Create an Amie account with a username and a password of at least 12 characters, then create a space or enter your partner’s invitation code. Passwords use PBKDF2-SHA256 with a random salt; bearer sessions expire after 30 days and are revoked on sign-out. Save your password: password recovery is not yet available.
+
+The interface is public, but every data and photo API request requires an Amie session. Earlier records from the ChatGPT-login version remain separate and are not automatically attached to new accounts.
+
+GitHub Actions deploys frontend changes on pushes to `main`. Backend schema and API releases use the Sites deployment workflow. `.openai/hosting.json` identifies the backend and contains no credentials.
+
+### Build the GitHub Pages interface
+
+`npx vite build --config vite.pages.config.ts`
+
+Output: `dist-pages/`, with `/couple_app/` asset paths and a scoped Home Screen manifest/service worker. No API secrets are bundled in the frontend.
 
 ## Local development
 
@@ -25,11 +37,11 @@ Node 22.13 or newer is required. Install dependencies with `npm run install:ci`.
 
    `node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_parched_annihilus.sql`
 3. `npm run dev -- --port 5173`
-4. Visit the printed loopback URL. “Start our story” uses the starter’s loopback-only development sign-in. Local data is separate from production.
+4. Visit the printed loopback URL. Use your Amie account. Local data is separate from production.
 
 ## Verification
 
-- `node --test tests/service.test.mjs`: integration checks against real SQLite for authorization, pairing, invite expiry, cross-space isolation, message retry deduplication, check-ins, location removal, anniversaries and photo access.
+- `node --test tests/service.test.mjs tests/auth.test.mjs`: integration checks against real SQLite for authorization, pairing, invite expiry, cross-space isolation, message retry deduplication, check-ins, location removal, anniversaries and photo access.
 - `npx tsc --noEmit`: TypeScript checks.
 - `npm run build`: production build.
 

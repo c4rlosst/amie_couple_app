@@ -1,3 +1,4 @@
+import { allowedRequest } from './account-auth.ts';
 type Bindings = { DB?: D1Database; BUCKET?: R2Bucket };
 type Member = { id: string; space_id: string | null; name: string; mood: string; status: string; status_at: number; last_seen: number; latitude: number | null; longitude: number | null; accuracy: number | null; location_at: number | null };
 class Problem extends Error { status: number; constructor(status: number, message: string) { super(message); this.status=status; } }
@@ -11,8 +12,7 @@ async function member(db: D1Database, uid: string) { return db.prepare('SELECT *
 async function requireMember(db: D1Database, uid: string) { const me = await member(db,uid); if (!me?.space_id) throw new Problem(403,'Create or join your space first.'); return me; }
 function sameOrigin(request: Request) {
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) throw new Problem(403,'Please use Amie directly to make changes.');
-  if (request.headers.get('sec-fetch-site') === 'cross-site') throw new Problem(403,'Please use Amie directly to make changes.');
+  if (!allowedRequest(request)) throw new Problem(403,'Please use Amie directly to make changes.');
 }
 
 export async function handleAmie(request: Request, env: Bindings, uid: string | null, displayName = 'You'): Promise<Response> {

@@ -1,7 +1,5 @@
-import Amie from './amie';
-import { getChatGPTUser } from './chatgpt-auth';
+import AccountShell from './account-shell';
 export const dynamic = 'force-dynamic';
 export default async function Page() {
-  const user = await getChatGPTUser();
-  return <Amie signedIn={!!user} />;
+  return <AccountShell />;
 }

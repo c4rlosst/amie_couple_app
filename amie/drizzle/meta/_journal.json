@@ -8,6 +8,13 @@
       "when": 1793719823705,
       "tag": "0000_parched_annihilus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793782863016,
+      "tag": "0001_funny_molten_man",
+      "breakpoints": true
     }
   ]
 }

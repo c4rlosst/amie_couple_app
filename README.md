@@ -2,9 +2,9 @@
 
 A private, mobile-first couple web app with a minimal iPhone-style interface.
 
-**[Open Amie](https://amie-our-little-space-nov26.mixedglint.chatgpt.site/)**
+**[Open Amie](https://c4rlosst.github.io/couple_app/)**
 
-The live app requires an authorized ChatGPT account. This GitHub repository is the main source for future changes; the running app is hosted on Sites with shared database and photo storage.
+The website runs independently on GitHub Pages with its own Amie accounts. Pushes to `main` automatically deploy the interface. A separate authenticated API stores shared messages, photos, and locations; no ChatGPT login is needed.
 
 The application lives in [`amie/`](amie/). See its [README](amie/README.md) for setup, verification, hosting, and iPhone limitations.
 
