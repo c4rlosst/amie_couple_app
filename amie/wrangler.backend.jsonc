@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "amie-api",
+  "account_id": "eef4f477fb0167079cf6a48157255973",
+  "main": "backend/index.ts",
+  "compatibility_date": "2026-05-15",
+  "workers_dev": true,
+  "preview_urls": false,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "amie-db",
+      "database_id": "b8b2a1e0-b8e1-4b13-83ee-65e8e9a985ba",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

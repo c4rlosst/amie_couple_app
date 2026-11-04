@@ -1,4 +1,4 @@
-export const API_ORIGIN='https://amie-our-little-space-nov26.mixedglint.chatgpt.site';
+export const API_ORIGIN='https://amie-api.amie-c4rlosst.workers.dev';
 const KEY='amie.session.v1';
 export function sessionToken(){return typeof window==='undefined'?null:localStorage.getItem(KEY);}
 export function saveSession(token:string|null){if(token)localStorage.setItem(KEY,token);else localStorage.removeItem(KEY);}

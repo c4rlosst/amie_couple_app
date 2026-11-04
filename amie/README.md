@@ -14,13 +14,13 @@ No invented messages or locations are seeded in production. Location sharing doe
 
 ## Independent website and accounts
 
-Open **https://c4rlosst.github.io/couple_app/**. GitHub Pages serves the interface; the API uses Cloudflare Workers with D1 and R2. No ChatGPT account is required.
+Open **https://c4rlosst.github.io/couple_app/**. GitHub Pages serves the interface; the independent API runs at `https://amie-api.amie-c4rlosst.workers.dev` in the app owner’s Cloudflare account, with D1 storage. No ChatGPT account is required.
 
 Create an Amie account with a username and a password of at least 12 characters, then create a space or enter your partner’s invitation code. Passwords use PBKDF2-SHA256 with a random salt; bearer sessions expire after 30 days and are revoked on sign-out. Save your password: password recovery is not yet available.
 
 The interface is public, but every data and photo API request requires an Amie session. Earlier records from the ChatGPT-login version remain separate and are not automatically attached to new accounts.
 
-GitHub Actions deploys frontend changes on pushes to `main`. Backend schema and API releases use the Sites deployment workflow. `.openai/hosting.json` identifies the backend and contains no credentials.
+GitHub Actions deploys frontend changes on pushes to `main`. Backend schema and API releases use `wrangler.backend.jsonc`; see `backend/README.md`. The legacy Sites backend remains private and is no longer used by the GitHub Pages app. Photo sharing requires enabling R2 and adding its bucket binding; accounts, messages, statuses and locations work without it.
 
 ### Build the GitHub Pages interface
 
