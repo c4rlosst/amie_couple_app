@@ -26,6 +26,10 @@ jobs:
           cache-dependency-path: amie/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: amie
+      - run: npx tsc --noEmit
+        working-directory: amie
+      - run: node --test tests/service.test.mjs tests/auth.test.mjs
+        working-directory: amie
       - run: npx vite build --config vite.pages.config.ts
         working-directory: amie
       - uses: actions/configure-pages@v5
