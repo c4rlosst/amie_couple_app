@@ -33,6 +33,14 @@ Storage is connected in production. Local integration tests cover uploads, file-
 
 Migration `0002_profile_photos.sql` adds a nullable avatar version to each member. Signed-in people can upload their own profile photo before pairing. Multipart uploads with `purpose=avatar` always update the signed-in member; the server ignores client owner IDs. Profile-photo reads require the owner or their partner. Replacements/removals clean up the old private R2 object. Profile photos never appear as chat messages.
 
+## Web Push
+
+Migration `0003_push_subscriptions.sql` stores per-account device endpoints and encryption keys. Only the owning account can manage or test a subscription. `/api/push` is authenticated; it never returns signing secrets or other devices' endpoints. Push delivery goes only to the other member of the sender's space, after a new message/photo/tap is persisted. Retried message IDs do not send duplicate notifications. Delivery runs through the Worker's `waitUntil`; failures do not undo messages.
+
+`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` are deployed as Cloudflare secrets. Do not print, commit, or replace the private key during normal deployments. Key rotation requires devices to enable notifications again. Use `wrangler secret list --config wrangler.backend.jsonc` to inspect names only. Approved push services are Apple, FCM, Mozilla, and Windows; HTTPS, key validation, and redirect rejection prevent arbitrary subscription URLs from reaching other services. Expired subscriptions are deleted after provider 404/410 responses. The test endpoint is limited to once every 30 seconds per device.
+
+Run `node --test tests/service.test.mjs tests/auth.test.mjs tests/backend.test.mjs tests/push.test.mjs`. The tests independently decrypt the encrypted push payload, verify its VAPID signature, and cover subscription ownership, partner-only delivery, expiration, duplicate events, and service-worker click handling. No production test accounts/subscriptions are created by these checks.
+
 ## Existing data
 
 The new D1 database starts empty. Legacy records are not copied or exposed automatically. The previous Sites backend stays private.

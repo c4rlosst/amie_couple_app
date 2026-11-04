@@ -6,6 +6,7 @@ A mobile-first couple web app for iPhone Safari and the Home Screen. Built with 
 
 - Private two-person spaces with one-use, hashed invitation codes that expire after 24 hours.
 - Messages and photo moments shared across devices, refreshed every 10 seconds while visible.
+- Opt-in Web Push for messages, photos, and love taps, with private notification text and per-device controls.
 - Mood check-ins, manual bedtime status and last-seen-in-Amie timestamps.
 - Opt-in location sharing while the page is open. Stopping sharing removes the stored coordinates. Every location includes its age and accuracy.
 - Private profile photos, anniversary date, profile names, iPhone Home Screen installation and an offline reconnect screen.
@@ -47,9 +48,13 @@ Node 22.13 or newer is required. Install dependencies with `npm run install:ci`.
 
 ## iPhone limits
 
-A web app cannot continuously track location while closed, read phone unlock history, or confirm someone is asleep. Bedtime is explicitly chosen by the person. The first version uses polling while open; background push notifications and a full paginated message history are not included. The UI shows the most recent 200 messages. Older records remain in storage. Offline messages are not queued; drafts remain until a send succeeds.
+A web app cannot continuously track location while closed, read phone unlock history, or confirm someone is asleep. Bedtime is explicitly chosen by the person. The first version uses polling while open; a full paginated message history is not included. The UI shows the most recent 200 messages. Older records remain in storage. Offline messages are not queued; drafts remain until a send succeeds.
 
 Open the hosted HTTPS URL in Safari, then Share → Add to Home Screen to install. Amie needs an internet connection for shared content.
+
+## Notifications
+
+On each iPhone (iOS 16.4+), add Amie to the Home Screen, open it from that icon, sign in, then go to Us → Preferences → Notifications. Tap Enable notifications and allow the system prompt. Send test checks that device. Each device opts in separately; Turn off and signing out unsubscribe that device. Notifications announce message/photo/love-tap events without displaying private chat text. Delivery requires connectivity and follows system notification/Focus settings.
 
 ## Hosting
 

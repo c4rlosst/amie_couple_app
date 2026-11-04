@@ -64,3 +64,13 @@ test('replacing and removing a profile photo affect only the signed-in person',a
   assert.equal((await getAvatar(env,'a','b')).status,200);
   assert.equal((await call('b')).me.avatar_version,b.avatar_version);
 });
+
+test('notification events follow persisted messages and ignore duplicate sends and profile changes',async()=>{
+  const {paired,env}=fixture();await paired();const events=[];const callback=(id,kind)=>events.push({id,kind});
+  const id=crypto.randomUUID();const request=()=>new Request('https://amie.test/api/amie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'message',id,body:'Private chat text'})});
+  await handleAmie(request(),env,'a','A',callback);await handleAmie(request(),env,'a','A',callback);
+  assert.deepEqual(events,[{id,kind:'message'}]);
+  const form=new FormData();form.set('photo',new Blob([new Uint8Array([255,216,255,224,1,2,3])],{type:'image/jpeg'}),'photo.jpg');
+  assert.equal((await handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:form}),env,'a','A',callback)).status,200);
+  assert.equal(events[1].kind,'photo');
+});

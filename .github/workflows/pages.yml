@@ -28,7 +28,7 @@ jobs:
         working-directory: amie
       - run: npx tsc --noEmit
         working-directory: amie
-      - run: node --test tests/service.test.mjs tests/auth.test.mjs tests/backend.test.mjs
+      - run: node --test tests/service.test.mjs tests/auth.test.mjs tests/backend.test.mjs tests/push.test.mjs
         working-directory: amie
       - run: npx vite build --config vite.pages.config.ts
         working-directory: amie

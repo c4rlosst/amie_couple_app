@@ -8,6 +8,9 @@ export const sessions=sqliteTable('sessions',{
 export const authAttempts=sqliteTable('auth_attempts',{
   id:text('id').primaryKey(),window:integer('window').notNull(),count:integer('count').notNull(),
 },t=>[index('auth_window').on(t.window)]);
+export const pushSubscriptions=sqliteTable('push_subscriptions',{
+  id:text('id').primaryKey(),accountId:text('account_id').notNull().references(()=>accounts.id),endpoint:text('endpoint').notNull(),p256dh:text('p256dh').notNull(),auth:text('auth').notNull(),vapidKey:text('vapid_key').notNull(),createdAt:integer('created_at').notNull(),lastTestAt:integer('last_test_at').notNull().default(0),
+},t=>[index('push_account').on(t.accountId)]);
 export const spaces = sqliteTable('spaces', {
   id: text('id').primaryKey(), ownerId: text('owner_id').notNull(), partnerId: text('partner_id'),
   inviteHash: text('invite_hash').unique(), inviteExpires: integer('invite_expires'), anniversary: text('anniversary'), createdAt: integer('created_at').notNull(),

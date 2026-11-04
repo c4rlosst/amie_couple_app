@@ -15,7 +15,7 @@ function sameOrigin(request: Request) {
   if (!allowedRequest(request)) throw new Problem(403,'Please use Amie directly to make changes.');
 }
 
-export async function handleAmie(request: Request, env: Bindings, uid: string | null, displayName = 'You'): Promise<Response> {
+export async function handleAmie(request: Request, env: Bindings, uid: string | null, displayName = 'You', onActivity?:(id:string,kind:'message'|'photo'|'tap')=>void): Promise<Response> {
   try {
     if (!uid) throw new Problem(401,'Sign in to open your private space.');
     const db = database(env); const now = Date.now();
@@ -56,6 +56,7 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
       await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:mime}});
       try { await db.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,file_key,mime,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(id,me.space_id,uid,'photo',text(form.get('caption'),1000),key,mime,now).run(); }
       catch(error) { await env.BUCKET.delete(key); throw error; }
+      onActivity?.(id,'photo');
       return json({ok:true,id});
     }
     const body = await request.json() as Record<string,unknown>;
@@ -119,7 +120,8 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
     } else if (action === 'message' || action === 'tap') {
       const message = action==='tap' ? 'Thinking of you ♡' : text(body.body,4000); check(message,'Write a message first.');
       const id = text(body.id,50); check(/^[\da-f-]{36}$/.test(id),'Please retry sending this message.');
-      await db.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,me.space_id,uid,action==='tap'?'tap':'text',message,now).run();
+      const inserted=await db.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,me.space_id,uid,action==='tap'?'tap':'text',message,now).run();
+      if(inserted.meta.changes)onActivity?.(id,action==='tap'?'tap':'message');
     } else throw new Problem(400,'This action is not available.');
     return json({ok:true});
   } catch(error) {
