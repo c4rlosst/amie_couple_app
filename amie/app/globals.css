@@ -226,3 +226,22 @@ html { -webkit-text-size-adjust:100%; scroll-padding-block:24px; }
   [data-keyboard-open='true'] .screen-messages main { padding-bottom:0; }
   .screen-messages:has(.message-composer:focus-within) .bottom-nav { display:none; }
 }
+
+/* Native chronological scrolling: the viewport scrolls, the thread owns bubble layout. */
+.message-list { display:block; overflow-anchor:auto; scroll-behavior:auto; touch-action:pan-y; }
+.message-thread { display:flex; flex-direction:column; gap:13px; min-height:100%; }
+.message-thread:has(.empty-state) { gap:0; }
+@media (max-width:900px) {
+  .screen-messages .message-list { overflow-anchor:auto; }
+}
+
+.message-thread { justify-content:flex-end; }
+@media (max-width:900px) {
+  html:has(.screen-messages), body:has(.screen-messages) { height:100%; overflow:hidden; overscroll-behavior:none; }
+  body:has(.screen-messages) { position:fixed; inset:0; width:100%; }
+  .screen-messages { margin:0; max-width:none; }
+  .screen-messages .bottom-nav { position:absolute; height:calc(68px + env(safe-area-inset-bottom)); }
+  .screen-messages main { padding-bottom:calc(68px + env(safe-area-inset-bottom)); }
+  .screen-messages:has(.message-composer:focus-within) main, [data-keyboard-open='true'] .screen-messages main { padding-bottom:0; }
+  .screen-messages .message-list { overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch; }
+}

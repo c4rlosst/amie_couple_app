@@ -16,7 +16,9 @@ export function useMobileViewport(){
       if(!editing)baseline=Math.max(baseline,window.innerHeight,height);
       root.dataset.keyboardOpen=String(editing&&Math.max(baseline-height,window.innerHeight-height)>100);
     };
-    update();viewport?.addEventListener('resize',update);viewport?.addEventListener('scroll',update);window.addEventListener('resize',update);document.addEventListener('focusin',update);document.addEventListener('focusout',update);
-    return()=>{viewport?.removeEventListener('resize',update);viewport?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',update);root.style.removeProperty('--visible-height');root.style.removeProperty('--visible-top');delete root.dataset.keyboardOpen;};
+    let frame=0;
+    const settle=()=>{update();cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{update();frame=requestAnimationFrame(update);});};
+    update();viewport?.addEventListener('resize',update);viewport?.addEventListener('scroll',update);window.addEventListener('resize',update);document.addEventListener('focusin',update);document.addEventListener('focusout',settle);window.addEventListener('pageshow',settle);window.addEventListener('orientationchange',settle);
+    return()=>{viewport?.removeEventListener('resize',update);viewport?.removeEventListener('scroll',update);window.removeEventListener('resize',update);document.removeEventListener('focusin',update);document.removeEventListener('focusout',settle);window.removeEventListener('pageshow',settle);window.removeEventListener('orientationchange',settle);cancelAnimationFrame(frame);root.style.removeProperty('--visible-height');root.style.removeProperty('--visible-top');delete root.dataset.keyboardOpen;};
   },[]);
 }
