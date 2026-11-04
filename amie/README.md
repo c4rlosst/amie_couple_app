@@ -20,7 +20,7 @@ Create an Amie account with a username and a password of at least 12 characters,
 
 The interface is public, but every data and photo API request requires an Amie session. Earlier records from the ChatGPT-login version remain separate and are not automatically attached to new accounts.
 
-GitHub Actions deploys frontend changes on pushes to `main`. Backend schema and API releases use `wrangler.backend.jsonc`; see `backend/README.md`. The legacy Sites backend remains private and is no longer used by the GitHub Pages app. Photo sharing requires enabling R2 and adding its bucket binding; accounts, messages, statuses and locations work without it.
+GitHub Actions deploys frontend changes on pushes to `main`. Backend schema and API releases use `wrangler.backend.jsonc`; see `backend/README.md`. The legacy Sites backend remains private and is no longer used by the GitHub Pages app. Photo storage is connected through the private R2 bucket `amie-photos`. Public bucket access is disabled; photos are served only through the authenticated API after checking couple membership.
 
 ### Build the GitHub Pages interface
 
