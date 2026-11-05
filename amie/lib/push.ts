@@ -1,9 +1,10 @@
 import {buildPushPayload} from '@block65/webcrypto-web-push';
 import {digest} from './account-auth.ts';
+import {distanceMetres,locationPoint,type SharedLocation} from './location.ts';
 
 export type PushEnv={DB?:D1Database;VAPID_PUBLIC_KEY?:string;VAPID_PRIVATE_KEY?:string;VAPID_SUBJECT?:string};
 type SubscriptionRow={id:string;account_id:string;endpoint:string;p256dh:string;auth:string;vapid_key:string};
-type Notice={title:string;body:string;tag:string};
+type Notice={title:string;body:string;tag:string;tab?:'map'};
 const reply=(data:unknown,status=200)=>Response.json(data,{status});
 const tokens=new Map<string,{authorization:string;until:number}>();
 export function pushReady(env:PushEnv){return !!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT);}
@@ -17,7 +18,7 @@ function decode(value:string){return Uint8Array.from(atob(value.replace(/-/g,'+'
 
 export async function sendPush(env:PushEnv,row:SubscriptionRow,notice:Notice,transport:typeof fetch=fetch){
   if(!pushReady(env)||!validEndpoint(row.endpoint)||row.vapid_key!==env.VAPID_PUBLIC_KEY)return false;
-  const payload=await buildPushPayload({data:notice,options:{ttl:3600,urgency:'high'}},{endpoint:row.endpoint,expirationTime:null,keys:{p256dh:row.p256dh,auth:row.auth}},{subject:env.VAPID_SUBJECT!,publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!});
+  const payload=await buildPushPayload({data:notice,options:{ttl:notice.tab==='map'?120:3600,urgency:'high'}},{endpoint:row.endpoint,expirationTime:null,keys:{p256dh:row.p256dh,auth:row.auth}},{subject:env.VAPID_SUBJECT!,publicKey:env.VAPID_PUBLIC_KEY!,privateKey:env.VAPID_PRIVATE_KEY!});
   const cacheKey=`${env.VAPID_PUBLIC_KEY}:${new URL(row.endpoint).origin}`;const cached=tokens.get(cacheKey);
   if(cached&&cached.until>Date.now())payload.headers.authorization=cached.authorization;
   else{if(tokens.size>16)tokens.clear();tokens.set(cacheKey,{authorization:payload.headers.authorization,until:Date.now()+3600000});}
@@ -68,4 +69,37 @@ export async function notifyPartner(env:PushEnv,uid:string,messageId:string,kind
   const body=kind==='photo'?'Your person shared a photo.':kind==='tap'?'Your person is thinking of you.':'You have a new message from your person.';
   const deliveries=await Promise.allSettled(results.map(row=>sendPush(env,row,{title:'Amie',body,tag:`amie-${messageId}`},transport)));
   if(deliveries.some(result=>result.status==='rejected'))console.warn('Some push deliveries were not accepted');
+}
+
+export async function notifyNearby(env:PushEnv,uid:string,transport:typeof fetch=fetch){
+  const db=env.DB;
+  if(!db||!pushReady(env))return;
+  const {results:members}=await db.prepare('SELECT peer.* FROM members me JOIN members peer ON peer.space_id=me.space_id WHERE me.id=? LIMIT 2').bind(uid).all<SharedLocation & {space_id:string}>();
+  if(members.length!==2)return;
+  const [first,second]=members;
+  const a=locationPoint(first), b=locationPoint(second);
+  const now=Date.now();
+  if(!a||!b||now-Math.min(a.updatedAt,b.updatedAt)>5*60000||a.accuracy===null||b.accuracy===null||Math.max(a.accuracy,b.accuracy)>200)return;
+
+  const distance=distanceMetres(a,b);
+  const uncertainty=a.accuracy+b.accuracy;
+  // A newer fix must win over a check that read an older pair of fixes.
+  const unchanged='EXISTS (SELECT 1 FROM members WHERE id=? AND space_id=? AND location_at=? AND latitude=? AND longitude=? AND accuracy=?)';
+  const snapshot=members.flatMap(member=>[member.id,member.space_id,member.location_at,member.latitude,member.longitude,member.accuracy]);
+  if(distance-uncertainty>=1250){
+    await db.prepare(`DELETE FROM nearby_presence WHERE space_id=? AND ${unchanged} AND ${unchanged}`).bind(first.space_id,...snapshot).run();
+    return;
+  }
+  if(distance+uncertainty>1000)return;
+
+  const {results}=await db.prepare('SELECT * FROM push_subscriptions WHERE account_id IN (?,?) AND vapid_key=?').bind(first.id,second.id,env.VAPID_PUBLIC_KEY).all<SubscriptionRow>();
+  if(!results.length)return;
+  const claim=await db.prepare(`INSERT INTO nearby_presence (space_id) SELECT ? WHERE ${unchanged} AND ${unchanged} ON CONFLICT(space_id) DO NOTHING`).bind(first.space_id,...snapshot).run();
+  if(!claim.meta.changes)return;
+
+  const deliveries=await Promise.allSettled(results.map(row=>{
+    const partner=row.account_id===first.id?second:first;
+    return sendPush(env,row,{title:'Amie',body:`${partner.name} is close!`,tag:'amie-nearby',tab:'map'},transport);
+  }));
+  if(deliveries.some(result=>result.status==='rejected'))console.warn('Some nearby push deliveries were not accepted');
 }

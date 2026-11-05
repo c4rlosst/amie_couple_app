@@ -19,13 +19,14 @@ type Member = { avatar_version:string|null; id:string; name:string; mood:string;
 type Data = {me:Member;partner:Member|null;space:{id:string;anniversary:string|null;created_at:number}|null;messages:ChatMessage[]};
 type Tab = 'home'|'messages'|'moments'|'map'|'us';
 const loveCooldown=3*60*60*1000;
+function tabFromHash(){return window.location.hash==='#map'?'map':window.location.hash==='#messages'?'messages':null;}
 const statusLabel:Record<string,string> = {around:'Around',busy:'A little busy',sleeping:'Going to sleep'};
 function ago(time:number|null|undefined) { if (!time) return 'No update yet'; const minutes = Math.max(0,Math.floor((Date.now()-time)/60000)); return minutes<1?'just now':minutes<60?`${minutes}m ago`:minutes<1440?`${Math.floor(minutes/60)}h ago`:new Date(time).toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
 
 
 
 export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{signedIn:boolean;onSignIn:()=>void;onSignOut:()=>Promise<void>;appearanceSettings:ReturnType<typeof useAppearance>}) {
-  const [tab,setTab] = useState<Tab>(()=>typeof window!=='undefined'&&window.location.hash==='#messages'?'messages':'home'); const [data,setData] = useState<Data|null>(null);
+  const [tab,setTab] = useState<Tab>(()=>typeof window==='undefined'?'home':tabFromHash()??'home'); const [data,setData] = useState<Data|null>(null);
   const [mapAllowed,setMapAllowed]=useState(()=>{try{return typeof window!=='undefined'&&localStorage.getItem('amie.map.openfreemap.v1')==='on';}catch{return false;}});
   const {appearance, saveAppearance, dark} = appearanceSettings;
   const [leavingMessages,setLeavingMessages]=useState(false);
@@ -78,8 +79,8 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
   useEffect(()=>{window.scrollTo(0,0);},[tab]);
   useEffect(()=>{const theme=document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');if(theme)theme.content=tab==='map'?(dark?'#242c36':'#e9eef1'):(dark?'#171719':'#f5f5f7');},[tab,dark]);
   useEffect(()=>{
-    const hash=()=>{if(window.location.hash==='#messages')setTab('messages');};
-    const pushed=(event:MessageEvent)=>{if(event.data?.type==='AMIE_OPEN_MESSAGES')setTab('messages');if(signedIn&&['AMIE_PUSH','AMIE_OPEN_MESSAGES'].includes(event.data?.type))refresh().catch(()=>{});};
+    const hash=()=>{const target=tabFromHash();if(target)setTab(target);};
+    const pushed=(event:MessageEvent)=>{if(event.data?.type==='AMIE_OPEN_MESSAGES')setTab('messages');if(event.data?.type==='AMIE_OPEN_MAP')setTab('map');if(signedIn&&['AMIE_PUSH','AMIE_OPEN_MESSAGES','AMIE_OPEN_MAP'].includes(event.data?.type))refresh().catch(()=>{});};
     window.addEventListener('hashchange',hash);navigator.serviceWorker?.addEventListener('message',pushed);
     return()=>{window.removeEventListener('hashchange',hash);navigator.serviceWorker?.removeEventListener('message',pushed);};
   },[refresh,signedIn]);

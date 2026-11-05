@@ -1,5 +1,5 @@
 import { account, allowedRequest, authRoute, cors } from '../lib/account-auth.ts';
-import {pushRoute,notifyPartner,pushReady,type PushEnv} from '../lib/push.ts';
+import {pushRoute,notifyPartner,notifyNearby,pushReady,type PushEnv} from '../lib/push.ts';
 import { getPhoto, getAvatar, handleAmie } from '../lib/service.ts';
 
 export type BackendEnv = PushEnv & { BUCKET?: R2Bucket };
@@ -31,7 +31,9 @@ export async function handleBackend(request:Request,env:BackendEnv,context?:Pick
     if(path==='/api/push')return cors(request,await pushRoute(request,env,user?.id??null));
     if(path==='/api/amie'){
       let delivery:Promise<unknown>|undefined;
-      const response=await handleAmie(request,env,user?.id??null,user?.name??'You',(id,kind)=>{delivery=notifyPartner(env,user!.id,id,kind).catch(()=>console.warn('Push delivery deferred'));});
+      const response=await handleAmie(request,env,user?.id??null,user?.name??'You',
+        (id,kind)=>{delivery=notifyPartner(env,user!.id,id,kind).catch(()=>console.warn('Push delivery deferred'));},
+        ()=>{delivery=notifyNearby(env,user!.id).catch(()=>console.warn('Nearby notification could not be checked'));});
       if(delivery){if(context)context.waitUntil(delivery);else await delivery;}
       return cors(request,response);
     }

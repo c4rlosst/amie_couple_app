@@ -6,15 +6,16 @@ self.addEventListener('fetch',event=>{if(event.request.mode==='navigate'&&event.
 
 self.addEventListener('push',event=>{
   let data={};try{data=event.data?.json()||{};}catch{}
-  const options={body:typeof data.body==='string'?data.body:'You have a new update from your person.',icon:scoped('icon-192.png'),badge:scoped('icon-192.png'),tag:typeof data.tag==='string'?data.tag:'amie-update',data:{tab:'messages'}};
+  const options={body:typeof data.body==='string'?data.body:'You have a new update from your person.',icon:scoped('icon-192.png'),badge:scoped('icon-192.png'),tag:typeof data.tag==='string'?data.tag:'amie-update',data:{tab:data.tab==='map'?'map':'messages'}};
   event.waitUntil(self.registration.showNotification('Amie',options).then(async()=>{for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true}))if(client.url.startsWith(self.registration.scope))client.postMessage({type:'AMIE_PUSH'});}));
 });
 self.addEventListener('notificationclick',event=>{
   event.notification.close();
   event.waitUntil((async()=>{
-    const target=scoped('#messages');
+    const map=event.notification.data?.tab==='map';
+    const target=scoped(map?'#map':'#messages');
     for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){
-      if(client.url.startsWith(self.registration.scope)){client.postMessage({type:'AMIE_OPEN_MESSAGES'});await client.focus();return;}
+      if(client.url.startsWith(self.registration.scope)){client.postMessage({type:map?'AMIE_OPEN_MAP':'AMIE_OPEN_MESSAGES'});await client.focus();return;}
     }
     await self.clients.openWindow(target);
   })());

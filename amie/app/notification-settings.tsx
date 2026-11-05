@@ -49,7 +49,7 @@ export default function NotificationSettings(){
   async function test(){setBusy(true);setError('');setNotice('');try{const sub=await registration?.pushManager.getSubscription();if(!sub)throw new Error('Enable notifications again first.');await pushRequest({action:'test',endpoint:sub.endpoint});setNotice('Test sent. Check your notifications.');}catch(cause){setError(cause instanceof Error?cause.message:'Unable to send a test.');}finally{setBusy(false);}}
   return <section className="notification-setting" aria-labelledby="notification-heading">
     <div className="notification-title"><Bell size={20}/><h3 id="notification-heading">Notifications</h3>{busy&&<LoaderCircle className="spin" size={16}/>}</div>
-    <p>Messages, photos, and little love taps. Message contents stay out of the preview.</p>
+    <p>Messages, photos, little love taps, and nearby alerts when you both share a recent location. Message contents stay out of the preview.</p>
     {hint?<p className="notification-hint">{hint}</p>:registration&&<><p className="notification-state">{enabled?'On for this device':'Off for this device'}</p><div className="notification-actions">{enabled?<><button type="button" className="button secondary" disabled={busy} onClick={()=>void test()}>Send test</button><button type="button" className="text-button" disabled={busy} onClick={()=>void disable()}>Turn off</button></>:<button type="button" className="button secondary" disabled={busy} onClick={()=>void enable()}>Enable notifications</button>}</div></>}
     {notice&&<p className="notification-feedback" role="status">{notice}</p>}{error&&<p className="camera-error" role="alert">{error}</p>}
   </section>;

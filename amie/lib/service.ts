@@ -15,7 +15,7 @@ function sameOrigin(request: Request) {
   if (!allowedRequest(request)) throw new Problem(403,'Please use Amie directly to make changes.');
 }
 
-export async function handleAmie(request: Request, env: Bindings, uid: string | null, displayName = 'You', onActivity?:(id:string,kind:'message'|'photo'|'tap')=>void): Promise<Response> {
+export async function handleAmie(request: Request, env: Bindings, uid: string | null, displayName = 'You', onActivity?:(id:string,kind:'message'|'photo'|'tap')=>void, onLocationSaved?:()=>void): Promise<Response> {
   try {
     if (!uid) throw new Problem(401,'Sign in to open your private space.');
     const db = database(env); const now = Date.now();
@@ -120,6 +120,7 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
       const {latitude,longitude,accuracy} = body;
       check(typeof latitude==='number' && Number.isFinite(latitude) && latitude >= -90 && latitude <= 90 && typeof longitude==='number' && Number.isFinite(longitude) && longitude >= -180 && longitude <=180 && typeof accuracy==='number' && Number.isFinite(accuracy) && accuracy>=0,'The location could not be read. Please try again.');
       await db.prepare('UPDATE members SET latitude = ?,longitude = ?,accuracy = ?,location_at = ? WHERE id = ?').bind(latitude,longitude,accuracy,now,uid).run();
+      onLocationSaved?.();
     } else if (action === 'stop-location') {
       await db.prepare('UPDATE members SET latitude = NULL,longitude = NULL,accuracy = NULL,location_at = NULL WHERE id = ?').bind(uid).run();
     } else if (action === 'anniversary') {

@@ -15,6 +15,9 @@ export const spaces = sqliteTable('spaces', {
   id: text('id').primaryKey(), ownerId: text('owner_id').notNull(), partnerId: text('partner_id'),
   inviteHash: text('invite_hash').unique(), inviteExpires: integer('invite_expires'), anniversary: text('anniversary'), createdAt: integer('created_at').notNull(),
 });
+export const nearbyPresence = sqliteTable('nearby_presence', {
+  spaceId: text('space_id').primaryKey().notNull().references(()=>spaces.id,{onDelete:'cascade'}),
+});
 export const members = sqliteTable('members', {
   id: text('id').primaryKey(), spaceId: text('space_id').references(() => spaces.id), name: text('name').notNull(),
   avatarVersion: text('avatar_version'),

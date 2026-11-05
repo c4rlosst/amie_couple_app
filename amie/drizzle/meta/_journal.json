@@ -29,6 +29,13 @@
       "when": 1793802784782,
       "tag": "0003_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793877850751,
+      "tag": "0004_nearby_presence",
+      "breakpoints": true
     }
   ]
 }
