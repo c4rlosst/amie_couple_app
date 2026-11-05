@@ -8,7 +8,7 @@ A mobile-first couple web app for iPhone Safari and the Home Screen. Built with 
 - Messages and photo moments shared across devices, refreshed every 10 seconds while visible.
 - Opt-in Web Push for messages, photos, and love taps, with private notification text and per-device controls.
 - Mood check-ins, manual bedtime status and last-seen-in-Amie timestamps.
-- A dark, Apple Maps-inspired Map tab with last-shared pins, local people search, a draggable details sheet, accuracy circles, and approximate straight-line distance.
+- A light-by-default Map tab with last-shared pins, a draggable details sheet, local people search, and approximate straight-line distance. Choose Light, Dark, or System under Us → Preferences.
 - Opt-in location sharing while the page is open. Stopping sharing removes the stored coordinates. Every location includes its age and accuracy.
 - Private profile photos, anniversary date, profile names, iPhone Home Screen installation and an offline reconnect screen.
 
@@ -55,7 +55,7 @@ Open the hosted HTTPS URL in Safari, then Share → Add to Home Screen to instal
 
 ## Maps
 
-The Map tab uses Leaflet with OpenStreetMap raster tiles and a dark presentation; it does not use Apple MapKit or Apple cartography. Loading map tiles is an explicit per-device choice, remembered locally. The tile provider receives the device IP and viewed map area; names, account details, and pin coordinates are drawn locally rather than sent as map overlays. Hide map clears that choice. No reverse-geocoding, third-party place search, prefetching, or offline map downloads are used. Tile requests use normal browser caching and show OpenStreetMap attribution.
+The Map tab uses Leaflet with OpenStreetMap raster tiles. Map appearance is saved on this device and System follows the device's color scheme. Loading map tiles is an explicit per-device choice, remembered locally. The tile provider receives the device IP and viewed map area; names, account details, and pin coordinates are drawn locally rather than sent as map overlays. Hide map clears that choice. No reverse-geocoding, third-party place search, prefetching, or offline map downloads are used. Tile requests use normal browser caching and show OpenStreetMap attribution.
 
 The sheet searches only the two members' names. Selecting a result centers its saved pin; Show both locations fits both pins. Timestamps and accuracy stay visible in the expanded card, and fixes older than five minutes are marked as potentially out of date. Distances are between saved positions, not routes or travel times. Maps do not start location sharing automatically, and web apps cannot continuously update GPS while closed.
 
