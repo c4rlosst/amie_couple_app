@@ -2,23 +2,26 @@
 'use client';
 
 import {useEffect, useRef, useState} from 'react';
+import {createPortal} from 'react-dom';
 import type {GeoJSONSource, Map as VectorMap, Marker as VectorMarker} from 'maplibre-gl';
 import {Focus, Info, Navigation, LoaderCircle, MapPin} from 'lucide-react';
 import {mapLongitude, type MapPoint} from '../lib/location';
 import {mapStyle} from '../lib/map-style';
+import Avatar from './profile-avatar';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 type Props = {
   points: MapPoint[];
   dark: boolean;
+  preview?: boolean;
   focusRequest?: {id: string; version: number} | null;
 };
 
 const initialCenter: [number, number] = [0, 20];
 const initialZoom = 1.5;
 
-export default function SharedMap({points, dark, focusRequest}: Props) {
+export default function SharedMap({points, dark, preview=false, focusRequest}: Props) {
   const container = useRef<HTMLDivElement>(null);
   const currentTheme = useRef(dark);
   currentTheme.current = dark;
@@ -29,6 +32,7 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
   const [failed, setFailed] = useState(false);
   const [tileError, setTileError] = useState(false);
   const markers = useRef(new Map<string, VectorMarker>());
+  const [markerTargets,setMarkerTargets] = useState<Map<string, HTMLElement>>(()=>new Map());
   const fitted = useRef<string | null>(null);
 
   useEffect(() => {
@@ -50,9 +54,10 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
         scrollZoom: false,
         dragRotate: false,
         touchPitch: false,
+        interactive: !preview,
       });
       map.touchZoomRotate.disableRotation();
-      map.addControl(new NavigationControl({showCompass: false}), 'bottom-left');
+      if (!preview) map.addControl(new NavigationControl({showCompass: false}), 'bottom-left');
       map.on('load', () => {
         clearTimeout(timeout);
         if (!disposed) setLoaded(true);
@@ -78,7 +83,7 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
       markers.current.clear();
       map?.remove();
     };
-  }, []);
+  }, [preview]);
 
   useEffect(() => {
     if (!view || !loaded) return;
@@ -95,10 +100,12 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
     if (!view) return;
     const {map, Marker} = view;
     const currentIds = new Set(points.map(point => point.id));
+    let markersChanged = false;
     for (const [id, marker] of markers.current) {
       if (currentIds.has(id)) continue;
       marker.remove();
       markers.current.delete(id);
+      markersChanged = true;
     }
 
     for (const point of points) {
@@ -106,21 +113,13 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
       if (!marker) {
         const element = document.createElement('div');
         element.className = `map-person-pin ${point.own ? 'own' : 'partner'}`;
-        element.setAttribute('role', 'img');
-        if (!point.own) {
-          const label = document.createElement('span');
-          label.className = 'map-person-label';
-          element.appendChild(label);
-        }
         marker = new Marker({element}).setLngLat(coordinates(point)).addTo(map);
         markers.current.set(point.id, marker);
+        markersChanged = true;
       }
-      const element = marker.getElement();
-      element.setAttribute('aria-label', `${point.name}’s last shared location`);
-      const label = element.firstElementChild;
-      if (label) label.textContent = point.name;
       marker.setLngLat(coordinates(point));
     }
+    if(markersChanged)setMarkerTargets(new Map([...markers.current].map(([id,marker])=>[id,marker.getElement()])));
 
     map.getSource<GeoJSONSource>('accuracy')?.setData({
       type: 'FeatureCollection',
@@ -137,12 +136,12 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
       }),
     });
 
-    const ids = JSON.stringify([...currentIds]);
+    const ids = JSON.stringify(preview ? points.map(coordinates) : [...currentIds]);
     if (ids === fitted.current) return;
     fitted.current = ids;
     if (points.length) fitLocations(map, points);
     else map.jumpTo({center: initialCenter, zoom: initialZoom});
-  }, [view, loaded, points]);
+  }, [view, loaded, points, preview]);
 
   useEffect(() => {
     if (!view || !focusRequest) return;
@@ -153,9 +152,13 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
   const recenter = points.find(point => point.own) ?? points[0];
   return <div className="shared-map-wrap">
     <div ref={container} className="shared-map" role="region" aria-label="Map of your last shared locations"/>
+    {points.map(point=>{
+      const target=markerTargets.get(point.id);
+      return target&&createPortal(<><Avatar name={point.name} id={point.id} version={point.avatarVersion} partner={!point.own} small/>{!point.own&&!preview&&<span className="map-person-label" aria-hidden="true">{point.name}</span>}</>,target,point.id);
+    })}
     {!loaded && !failed && !tileError && <div className="map-loading" role="status"><LoaderCircle size={22} className="spin"/>Loading map…</div>}
     {failed && <div className="map-loading" role="alert"><MapPin size={24}/>The map couldn’t load. Saved locations are available below.</div>}
-    {loaded && view && recenter && <div className="map-controls" aria-label="Map controls" role="group">
+    {!preview && loaded && view && recenter && <div className="map-controls" aria-label="Map controls" role="group">
       {points.length > 1 && <button type="button" onClick={() => fitLocations(view.map, points)} aria-label="Show both locations"><Focus size={20}/></button>}
       <button type="button" onClick={() => fitLocations(view.map, [recenter])} aria-label={recenter.own ? 'Center on your saved location' : 'Center on your partner’s saved location'}><Navigation size={20}/></button>
     </div>}

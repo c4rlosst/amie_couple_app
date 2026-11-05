@@ -19,15 +19,17 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),30000);return()=>clearInterval(timer);},[]);
   const own=useMemo(()=>locationPoint(me,true),[me]);const other=useMemo(()=>locationPoint(partner),[partner]);
   const points=useMemo(()=>[own,other].filter((point):point is NonNullable<typeof point>=>!!point),[own,other]);
+  const previewPoints=useMemo(()=>other?[other]:[],[other]);
   const distance=own&&other?distanceMetres(own,other):null;
-  const people=[{member:me,point:own,label:'You',own:true},{member:partner,point:other,label:partner?.name||'Your person',own:false}].filter(person=>!full||!query||`${person.label} ${person.member?.name||''}`.toLowerCase().includes(query.toLowerCase()));
+  const people=[{member:me,point:own,label:'You',own:true},{member:partner,point:other,label:partner?.name||'Your person',own:false}].filter(person=>(full||!person.own)&&(!query||`${person.label} ${person.member?.name||''}`.toLowerCase().includes(query.toLowerCase())));
   const details=<>
     {full&&distance!==null&&<p className="map-distance-note">Straight-line distance between saved locations.</p>}
     <div className="location-people">{people.map(person=><div className="location-person" key={person.own?'you':'partner'}>
       <button className="location-person-target" type="button" disabled={!full||!mapAllowed||!person.point} aria-label={`Show ${person.label} on map`} onPointerDown={event=>event.preventDefault()} onClick={()=>person.point&&locate(person.point.id)}><span className={`location-person-dot ${person.own?'own':'partner'}`} aria-hidden="true"/>
-      <div><h3>{person.label}</h3><p>{person.point?locationAge(person.point.updatedAt,now):person.member?'No location shared':'Not connected yet'}</p>{person.point&&<small>{now-person.point.updatedAt>=300000?'May be out of date · ':''}{person.point.accuracy===null?'Accuracy unavailable':`Accuracy about ${formatDistance(person.point.accuracy)}`}</small>}</div></button>
+      <div><h3>{person.label}</h3><p>{person.point?locationAge(person.point.updatedAt,now):person.member?'No location shared':'Not connected yet'}</p>{full&&person.point&&<small>{now-person.point.updatedAt>=300000?'May be out of date · ':''}{person.point.accuracy===null?'Accuracy unavailable':`Accuracy about ${formatDistance(person.point.accuracy)}`}</small>}</div></button>
       {person.point&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Apple Maps`}><ArrowUpRight size={19}/></a>}
     </div>)}{!people.length&&<p role="status" className="map-no-results">No matching person. Try your name or your partner’s name.</p>}</div>
+    {!full&&mapAllowed&&other&&<div className="location-preview"><SharedMap points={previewPoints} dark={dark} preview/></div>}
     <div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>
     {!watching&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
     {(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
@@ -68,7 +70,6 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
         <Search size={17}/><input ref={search} type="search" aria-label="Find a person on the map" placeholder="Find a person" value={query} onFocus={()=>setExpanded(true)} onChange={event=>setQuery(event.target.value)}/>
       </form>}
     </>}
-    {!full&&distance!==null&&<div className="location-distance"><strong>About {formatDistance(distance)} apart</strong><span>Between your last shared locations · straight-line distance</span></div>}
     {full?<div id="map-location-details" className="map-sheet-disclosure" data-expanded={expanded} inert={!expanded}>
       <div className="map-sheet-disclosure-inner">{details}</div>
     </div>:details}
