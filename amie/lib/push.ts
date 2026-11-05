@@ -65,8 +65,19 @@ export async function pushRoute(request:Request,env:PushEnv,uid:string|null,tran
 
 export async function notifyPartner(env:PushEnv,uid:string,messageId:string,kind:'message'|'photo'|'tap',transport:typeof fetch=fetch){
   if(!env.DB||!pushReady(env))return;
-  const {results}=await env.DB.prepare('SELECT p.* FROM push_subscriptions p JOIN members recipient ON recipient.id=p.account_id JOIN members sender ON sender.space_id=recipient.space_id WHERE sender.id=? AND recipient.id!=sender.id AND sender.space_id IS NOT NULL LIMIT 10').bind(uid).all<SubscriptionRow>();
-  const body=kind==='photo'?'Your person shared a photo.':kind==='tap'?'Your person is thinking of you.':'You have a new message from your person.';
+  const {results}=await env.DB.prepare(`
+    SELECT p.*, sender.name AS sender_name, m.body AS message_body
+    FROM messages m
+    JOIN members sender ON sender.id=m.sender_id AND sender.space_id=m.space_id
+    JOIN members recipient ON recipient.space_id=m.space_id AND recipient.id!=sender.id
+    JOIN push_subscriptions p ON p.account_id=recipient.id
+    WHERE m.id=? AND m.sender_id=? AND m.kind=? LIMIT 10
+  `).bind(messageId,uid,kind==='message'?'text':kind).all<SubscriptionRow & {sender_name:string;message_body:string}>();
+  const message=results[0];
+  if(!message)return;
+  const characters=Array.from(message.message_body);
+  const preview=characters.length>180?`${characters.slice(0,180).join('')}…`:message.message_body;
+  const body=kind==='photo'?`${message.sender_name} sent a photo.`:kind==='tap'?'Your person is thinking of you.':preview;
   const deliveries=await Promise.allSettled(results.map(row=>sendPush(env,row,{title:'Amie',body,tag:`amie-${messageId}`},transport)));
   if(deliveries.some(result=>result.status==='rejected'))console.warn('Some push deliveries were not accepted');
 }

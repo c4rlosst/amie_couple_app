@@ -51,19 +51,26 @@ async function decrypt(payload,s){
   let end=plain.length-1;while(plain[end]===0)end--;assert.equal(plain[end],2);return JSON.parse(new TextDecoder().decode(plain.slice(0,end)));
 }
 
-test('partner delivery is encrypted, generic, correctly signed and does not notify unrelated accounts',async()=>{
+test('partner delivery encrypts message previews, announces photos, and stays inside the pair',async()=>{
   const {env,sqlite}=await fixture();
   sqlite.exec("INSERT INTO spaces (id,owner_id,partner_id,created_at) VALUES ('pair','a','b',0); INSERT INTO members (id,space_id,name,status_at,last_seen) VALUES ('a','pair','A',0,0),('b','pair','B',0,0),('c',NULL,'C',0,0);");
+  const insert=sqlite.prepare("INSERT INTO messages (id,space_id,sender_id,kind,body,created_at) VALUES (?,'pair','a',?,?,0)");
+  insert.run('test-id','text','See you soon ♡');
+  insert.run('photo','photo','Private caption');
+  insert.run('tap','tap','Thinking of you ♡');
+  insert.run('long','text','🌙'.repeat(181));
   const own=await subscription('own'),partner=await subscription('partner'),other=await subscription('other');
   for(const [uid,s] of [['a',own],['b',partner],['c',other]])await register(env,uid,s);
   const sent=[];const transport=async(url,payload)=>{sent.push({url,payload});return new Response(null,{status:201});};
   await notifyPartner(env,'a','test-id','message',transport);assert.equal(sent.length,1);assert.equal(sent[0].url,partner.endpoint);
-  const payload=sent[0].payload;const notice=await decrypt(payload,partner);assert.equal(notice.body,'You have a new message from your person.');assert.equal(notice.tag,'amie-test-id');assert.equal(payload.redirect,'manual');
+  const payload=sent[0].payload;const notice=await decrypt(payload,partner);assert.equal(notice.body,'See you soon ♡');assert.equal(notice.tag,'amie-test-id');assert.equal(payload.redirect,'manual');
   const auth=payload.headers.authorization.match(/^vapid t=([^,]+), k=(.+)$/);assert.equal(auth[2],env.VAPID_PUBLIC_KEY);
   const [header,claims,signature]=auth[1].split('.');const jwt=JSON.parse(Buffer.from(claims,'base64url'));assert.equal(jwt.aud,'https://web.push.apple.com');assert.equal(jwt.sub,env.VAPID_SUBJECT);
   const key=await crypto.subtle.importKey('raw',Buffer.from(env.VAPID_PUBLIC_KEY,'base64url'),{name:'ECDSA',namedCurve:'P-256'},false,['verify']);assert.equal(await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},key,Buffer.from(signature,'base64url'),new TextEncoder().encode(`${header}.${claims}`)),true);
-  await notifyPartner(env,'a','photo','photo',transport);assert.equal((await decrypt(sent[1].payload,partner)).body,'Your person shared a photo.');assert.equal(sent[1].payload.headers.authorization,payload.headers.authorization);
+  await notifyPartner(env,'a','photo','photo',transport);assert.equal((await decrypt(sent[1].payload,partner)).body,'A sent a photo.');assert.equal(sent[1].payload.headers.authorization,payload.headers.authorization);
   await notifyPartner(env,'a','tap','tap',transport);assert.equal((await decrypt(sent[2].payload,partner)).body,'Your person is thinking of you.');
+  await notifyPartner(env,'a','long','message',transport);assert.equal((await decrypt(sent[3].payload,partner)).body,`${'🌙'.repeat(180)}…`);
+  await notifyPartner(env,'b','test-id','message',transport);assert.equal(sent.length,4);
 });
 
 test('expired subscriptions are removed and test delivery is throttled per device',async()=>{
