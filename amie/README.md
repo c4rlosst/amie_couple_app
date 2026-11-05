@@ -8,7 +8,8 @@ A mobile-first couple web app for iPhone Safari and the Home Screen. Built with 
 - Messages and photo moments shared across devices, refreshed every 10 seconds while visible.
 - Opt-in Web Push for messages, photos, and love taps, with private notification text and per-device controls.
 - Mood check-ins, manual bedtime status and last-seen-in-Amie timestamps.
-- A light-by-default Map tab with last-shared pins, a draggable details sheet, local people search, and approximate straight-line distance. Choose Light, Dark, or System under Us → Preferences.
+- An interactive Map tab with last-shared pins, a draggable details sheet, local people search, and approximate straight-line distance.
+- Light, Dark, and System appearance across the app, under Us → Preferences. Light is the default.
 - Opt-in location sharing while the page is open. Stopping sharing removes the stored coordinates. Every location includes its age and accuracy.
 - Private profile photos, anniversary date, profile names, iPhone Home Screen installation and an offline reconnect screen.
 
@@ -55,7 +56,7 @@ Open the hosted HTTPS URL in Safari, then Share → Add to Home Screen to instal
 
 ## Maps
 
-The Map tab uses a custom MapLibre style with vector data from OpenFreeMap. Map appearance is saved on this device and System follows the device's color scheme. Loading the map connects to OpenFreeMap and requests tiles for the area in view. Amie draws saved pins and accuracy circles on the page. Loading the map is a per-device choice and Hide map clears that choice.
+The Map tab uses a custom MapLibre style with vector data from OpenFreeMap. Appearance is saved on this device and System follows the device's color scheme. Loading the map connects to OpenFreeMap and requests tiles for the area in view. Amie draws saved pins and accuracy circles on the page. Loading the map is a per-device choice and Hide map clears that choice. The map credits are available through the info button.
 
 The sheet searches only the two members' names. Selecting a result centers its saved pin; Show both locations fits both pins. Timestamps and accuracy stay visible in the expanded card, and fixes older than five minutes are marked as potentially out of date. Distances are between saved positions, not routes or travel times. Maps do not start location sharing automatically, and web apps cannot continuously update GPS while closed.
 

@@ -3,7 +3,7 @@
 
 import {useEffect, useRef, useState} from 'react';
 import type {GeoJSONSource, Map as VectorMap, Marker as VectorMarker} from 'maplibre-gl';
-import {Focus, Navigation, LoaderCircle, MapPin} from 'lucide-react';
+import {Focus, Info, Navigation, LoaderCircle, MapPin} from 'lucide-react';
 import {mapLongitude, type MapPoint} from '../lib/location';
 import {mapStyle} from '../lib/map-style';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
@@ -46,7 +46,7 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
         center: initialCenter,
         zoom: initialZoom,
         maxZoom: 19,
-        attributionControl: {compact: false},
+        attributionControl: false,
         scrollZoom: false,
         dragRotate: false,
         touchPitch: false,
@@ -159,6 +159,14 @@ export default function SharedMap({points, dark, focusRequest}: Props) {
       {points.length > 1 && <button type="button" onClick={() => fitLocations(view.map, points)} aria-label="Show both locations"><Focus size={20}/></button>}
       <button type="button" onClick={() => fitLocations(view.map, [recenter])} aria-label={recenter.own ? 'Center on your saved location' : 'Center on your partner’s saved location'}><Navigation size={20}/></button>
     </div>}
+    {loaded && <details className="map-credits">
+      <summary aria-label="Map credits" title="Map credits"><Info size={17}/></summary>
+      <div className="map-credits-links">
+        <a href="https://openfreemap.org/" target="_blank" rel="noreferrer">OpenFreeMap</a>
+        <a href="https://openmaptiles.org/" target="_blank" rel="noreferrer">© OpenMapTiles</a>
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>
+      </div>
+    </details>}
     {tileError && <div className="map-tile-error" role="status">The map couldn’t load this area. Saved locations are available below.</div>}
   </div>;
 }

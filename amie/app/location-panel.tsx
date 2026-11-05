@@ -21,6 +21,19 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
   const points=useMemo(()=>[own,other].filter((point):point is NonNullable<typeof point>=>!!point),[own,other]);
   const distance=own&&other?distanceMetres(own,other):null;
   const people=[{member:me,point:own,label:'You',own:true},{member:partner,point:other,label:partner?.name||'Your person',own:false}].filter(person=>!full||!query||`${person.label} ${person.member?.name||''}`.toLowerCase().includes(query.toLowerCase()));
+  const details=<>
+    {full&&distance!==null&&<p className="map-distance-note">Straight-line distance between saved locations.</p>}
+    <div className="location-people">{people.map(person=><div className="location-person" key={person.own?'you':'partner'}>
+      <button className="location-person-target" type="button" disabled={!full||!mapAllowed||!person.point} aria-label={`Show ${person.label} on map`} onPointerDown={event=>event.preventDefault()} onClick={()=>person.point&&locate(person.point.id)}><span className={`location-person-dot ${person.own?'own':'partner'}`} aria-hidden="true"/>
+      <div><h3>{person.label}</h3><p>{person.point?locationAge(person.point.updatedAt,now):person.member?'No location shared':'Not connected yet'}</p>{person.point&&<small>{now-person.point.updatedAt>=300000?'May be out of date · ':''}{person.point.accuracy===null?'Accuracy unavailable':`Accuracy about ${formatDistance(person.point.accuracy)}`}</small>}</div></button>
+      {person.point&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Apple Maps`}><ArrowUpRight size={19}/></a>}
+    </div>)}{!people.length&&<p role="status" className="map-no-results">No matching person. Try your name or your partner’s name.</p>}</div>
+    <div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>
+    {!watching&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
+    {(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
+    <p className="location-explainer"><ShieldCheck size={15}/>Updates only while Amie is open. Stopping removes your saved location.</p>
+    {full&&mapAllowed&&<button className="text-button hide-map" onClick={()=>{showDetails(false);onMapAllowed(false);}}>Hide map</button>}
+  </>;
   return <section className={`location-panel ${full?'location-full':''}`} aria-label="Shared locations">
     {!full&&<div className="section-heading"><h2>Location</h2>{onOpenMap&&<button className="text-button" onClick={onOpenMap}>View map<ChevronRight size={16}/></button>}</div>}
     {full&&(mapAllowed?<SharedMap points={points} dark={dark} focusRequest={focusRequest}/>:<div className="map-consent">
@@ -28,6 +41,7 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
       <h3>Your shared map</h3>
       <small>OpenFreeMap receives your IP address and the map area you view. Amie draws your saved pins on the map.</small>
       <button className="button secondary" onClick={()=>onMapAllowed(true)}>Load map</button>
+      <small className="map-consent-credit">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a></small>
     </div>)}
     <div className={full?'map-dock':'location-summary'}>
     <div className={full?'location-sheet':undefined}>
@@ -55,21 +69,9 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
       </form>}
     </>}
     {!full&&distance!==null&&<div className="location-distance"><strong>About {formatDistance(distance)} apart</strong><span>Between your last shared locations · straight-line distance</span></div>}
-    <div id={full?'map-location-details':undefined}>
-    {full&&expanded&&distance!==null&&<p className="map-distance-note">Straight-line distance between saved locations.</p>}
-    <div className="location-people" hidden={full&&mapAllowed&&!expanded}>{people.map(person=><div className="location-person" key={person.own?'you':'partner'}>
-      <button className="location-person-target" type="button" disabled={!full||!mapAllowed||!person.point} aria-label={`Show ${person.label} on map`} onPointerDown={event=>event.preventDefault()} onClick={()=>person.point&&locate(person.point.id)}><span className={`location-person-dot ${person.own?'own':'partner'}`} aria-hidden="true"/>
-      <div><h3>{person.label}</h3><p>{person.point?locationAge(person.point.updatedAt,now):person.member?'No location shared':'Not connected yet'}</p>{person.point&&(!full||expanded)&&<small>{now-person.point.updatedAt>=300000?'May be out of date · ':''}{person.point.accuracy===null?'Accuracy unavailable':`Accuracy about ${formatDistance(person.point.accuracy)}`}</small>}</div></button>
-      {person.point&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Apple Maps`}><ArrowUpRight size={19}/></a>}
-    </div>)}{!people.length&&<p role="status" className="map-no-results">No matching person. Try your name or your partner’s name.</p>}</div>
-    <div hidden={full&&!expanded}>
-    <div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>
-    {!watching&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
-    {(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
-    <p className="location-explainer"><ShieldCheck size={15}/>Updates only while Amie is open. Stopping removes your saved location.</p>
-    {full&&mapAllowed&&<button className="text-button hide-map" onClick={()=>{showDetails(false);onMapAllowed(false);}}>Hide map</button>}
-    </div>
-    </div>
+    {full?<div id="map-location-details" className="map-sheet-disclosure" data-expanded={expanded} inert={!expanded}>
+      <div className="map-sheet-disclosure-inner">{details}</div>
+    </div>:details}
     </div>
     </div>
   </section>;
