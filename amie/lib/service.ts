@@ -22,6 +22,15 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
     await db.prepare('INSERT INTO members (id,name,status_at,last_seen) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(uid,text(displayName,40)||'You',now,now).run();
     if (request.method === 'GET') {
       const me = (await member(db,uid))!;
+      const params = new URL(request.url).searchParams;
+      if (params.has('momentsFrom') || params.has('momentsTo')) {
+        const from = Number(params.get('momentsFrom'));
+        const to = Number(params.get('momentsTo'));
+        check(Number.isSafeInteger(from) && Number.isSafeInteger(to) && from > 0 && to > from && to-from <= 32*86400000,'Choose a valid calendar month.');
+        if (!me.space_id) return json({photos:[]});
+        const photos = await db.prepare("SELECT id,sender_id,body,created_at FROM messages WHERE space_id = ? AND kind = 'photo' AND created_at >= ? AND created_at < ? ORDER BY created_at DESC,id DESC").bind(me.space_id,from,to).all();
+        return json({photos:photos.results});
+      }
       if (!me.space_id) return json({me,partner:null,space:null,messages:[]});
       const [partner,space,messages] = await Promise.all([
         db.prepare('SELECT * FROM members WHERE space_id = ? AND id != ?').bind(me.space_id,uid).first(),

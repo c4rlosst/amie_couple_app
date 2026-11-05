@@ -579,3 +579,37 @@ body:has(.screen-map) { position:fixed; inset:0; width:100%; overflow:hidden; }
   .screen-messages .message-composer .send-button { border:5px solid var(--surface); }
   .chat-photo img { max-height:260px; }
 }
+
+/* Moments calendar and the selected day's album. */
+.moment-calendar-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.12fr); align-items:start; gap:20px; }
+.moment-calendar { padding:16px; }
+.moment-calendar-heading, .moment-day-heading { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.moment-calendar-navigation { display:flex; }
+.moment-calendar-navigation .icon-button { color:var(--deep); }
+.moment-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); margin-top:8px; }
+.moment-weekday { padding:6px 0; text-align:center; font-size:11px; font-weight:600; color:var(--muted); }
+.moment-date { position:relative; min-height:44px; padding:0 2px 5px; border-radius:12px; font-size:14px; }
+.moment-date:hover:not(:disabled) { background:var(--surface-soft); }
+.moment-date[aria-current='date'] { color:var(--deep); font-weight:700; }
+.moment-date[aria-pressed='true'] { background:var(--accent-surface); color:var(--deep); font-weight:700; box-shadow:inset 0 0 0 1px var(--deep); }
+.moment-date-dot, .moment-calendar-legend span { display:block; width:5px; height:5px; border-radius:50%; background:var(--deep); }
+.moment-date-dot { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); }
+.moment-calendar-legend { display:flex; align-items:center; gap:7px; margin-top:10px; color:var(--muted); font-size:11px; }
+.moment-day-heading { margin-bottom:12px; }
+.moments-add { flex-shrink:0; padding-inline:11px; }
+.moment-day-heading p, .moment-calendar-notice { margin-top:4px; font-size:13px; color:var(--muted); }
+.moment-calendar-day .moments-empty { min-height:150px; padding:18px; }
+.moment-calendar-day .moments-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.moment-calendar-notice { margin-bottom:8px; }
+@media (max-width:900px) {
+  .moment-calendar-layout { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .moment-calendar-layout .moment-calendar { padding:12px; }
+  .moment-day-heading h2 { font-size:16px; }
+  .screen-messages .bottom-nav { display:none; }
+  .screen-messages .main-shell main { padding-bottom:env(safe-area-inset-bottom); }
+  [data-keyboard-open='true'] .screen-messages .main-shell main { padding-bottom:0; }
+  .screen-messages .main-shell { animation:message-screen-in 240ms cubic-bezier(.22,.7,.32,1) both; }
+  .screen-messages.leaving-messages .main-shell { animation:message-screen-out 240ms ease-in both; pointer-events:none; }
+}
+@keyframes message-screen-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+@keyframes message-screen-out { from { transform:translateX(0); } to { transform:translateX(100%); } }

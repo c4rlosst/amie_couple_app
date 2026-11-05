@@ -35,6 +35,25 @@ async function uploadAvatar(env,uid,bytes=new Uint8Array([255,216,255,224,1,2,3]
   form.set('member_id','b'); // Client-supplied owner fields must never choose the edited profile.
   return handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:form}),env,uid);
 }
+test('the calendar retrieves older photos within its time range and space',async()=>{
+  const {call,paired,sqlite,env}=fixture();
+  await paired();
+  await call('c',{action:'create',name:'Other space'});
+  const space=(await call('a')).space.id;
+  const other=(await call('c')).space.id;
+  const from=Date.UTC(2025,0,1), to=Date.UTC(2025,1,1);
+  const insert=sqlite.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,created_at) VALUES (?,?,?,?,?,?)');
+  for(const [id,owner,sender,kind,time] of [['first',space,'a','photo',from],['last',space,'b','photo',to-1],['next',space,'b','photo',to],['private',other,'c','photo',from],['text',space,'b','text',from]]) {
+    insert.run(id,owner,sender,kind,'',time);
+  }
+  for(let i=0;i<200;i++)insert.run(`new-${i}`,space,'a','text','',to+i+1);
+  assert.equal((await call('a')).messages.some(message=>message.id==='first'),false);
+  const request=new Request(`https://amie.test/api/amie?momentsFrom=${from}&momentsTo=${to}`);
+  assert.equal((await handleAmie(request,env,null)).status,401);
+  assert.deepEqual((await (await handleAmie(request,env,'b')).json()).photos.map(photo=>photo.id),['last','first']);
+  assert.deepEqual((await (await handleAmie(request,env,'c')).json()).photos.map(photo=>photo.id),['private']);
+  assert.equal((await handleAmie(new Request(`https://amie.test/api/amie?momentsFrom=${from}&momentsTo=${to+32*86400000}`),env,'b')).status,400);
+});
 test('profile photos work before pairing and are private to their owner and partner',async()=>{
   const {call,env}=fixture();
   assert.equal((await uploadAvatar(env,'a')).status,200);
