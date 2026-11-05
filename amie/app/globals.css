@@ -540,7 +540,7 @@ body:has(.screen-map) { position:fixed; inset:0; width:100%; overflow:hidden; }
 .location-preview {
   --map-ground:var(--surface-soft); --map-surface:var(--surface); --map-muted:var(--muted);
   --map-ink:var(--ink); --map-accent:var(--deep); --map-line:var(--line); --map-shadow:0 2px 10px #0002;
-  height:146px; margin-top:12px; overflow:hidden; border-radius:13px;
+  height:180px; margin-top:12px; overflow:hidden; border-radius:13px;
 }
 .location-preview .shared-map-wrap { height:100%; }
 .location-preview .shared-map { inset:0; }

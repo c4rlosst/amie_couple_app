@@ -27,13 +27,13 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
     <div className="location-people">{people.map(person=><div className="location-person" key={person.own?'you':'partner'}>
       <button className="location-person-target" type="button" disabled={!full||!mapAllowed||!person.point} aria-label={`Show ${person.label} on map`} onPointerDown={event=>event.preventDefault()} onClick={()=>person.point&&locate(person.point.id)}><span className={`location-person-dot ${person.own?'own':'partner'}`} aria-hidden="true"/>
       <div><h3>{person.label}</h3><p>{person.point?locationAge(person.point.updatedAt,now):person.member?'No location shared':'Not connected yet'}</p>{full&&person.point&&<small>{now-person.point.updatedAt>=300000?'May be out of date · ':''}{person.point.accuracy===null?'Accuracy unavailable':`Accuracy about ${formatDistance(person.point.accuracy)}`}</small>}</div></button>
-      {person.point&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Apple Maps`}><ArrowUpRight size={19}/></a>}
+      {full&&person.point&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Apple Maps`}><ArrowUpRight size={19}/></a>}
     </div>)}{!people.length&&<p role="status" className="map-no-results">No matching person. Try your name or your partner’s name.</p>}</div>
     {!full&&mapAllowed&&other&&<div className="location-preview"><SharedMap points={previewPoints} dark={dark} preview/></div>}
-    <div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>
-    {!watching&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
-    {(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
-    <p className="location-explainer"><ShieldCheck size={15}/>Updates only while Amie is open. Stopping removes your saved location.</p>
+    {full&&<div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>}
+    {(!full||!watching)&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy||watching}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
+    {full&&(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
+    {full&&<p className="location-explainer"><ShieldCheck size={15}/>Updates only while Amie is open. Stopping removes your saved location.</p>}
     {full&&mapAllowed&&<button className="text-button hide-map" onClick={()=>{showDetails(false);onMapAllowed(false);}}>Hide map</button>}
   </>;
   return <section className={`location-panel ${full?'location-full':''}`} aria-label="Shared locations">
