@@ -4,8 +4,8 @@ import {ArrowUpRight,ChevronRight,ChevronDown,MapPin,Navigation,ShieldCheck,Sear
 import SharedMap from './shared-map';
 import {distanceMetres,formatDistance,locationAge,locationPoint,type SharedLocation} from '../lib/location';
 
-type Props={me?:SharedLocation;partner?:SharedLocation|null;watching:boolean;busy:boolean;onShare:()=>void;onStop:()=>void;onOpenMap?:()=>void;full?:boolean;mapAllowed:boolean;onMapAllowed:(value:boolean)=>void};
-export default function LocationPanel({me,partner,watching,busy,onShare,onStop,onOpenMap,full=false,mapAllowed,onMapAllowed}:Props){
+type Props={me?:SharedLocation;partner?:SharedLocation|null;watching:boolean;busy:boolean;onShare:()=>void;onStop:()=>void;onOpenMap?:()=>void;full?:boolean;dark?:boolean;mapAllowed:boolean;onMapAllowed:(value:boolean)=>void};
+export default function LocationPanel({me,partner,watching,busy,onShare,onStop,onOpenMap,full=false,dark=false,mapAllowed,onMapAllowed}:Props){
   const [expanded,setExpanded]=useState(false);const [query,setQuery]=useState('');const search=useRef<HTMLInputElement>(null);
   const [focusRequest,setFocusRequest]=useState<{id:string;version:number}|null>(null);
   function locate(id:string){search.current?.blur();setQuery('');setExpanded(false);setFocusRequest(previous=>({id,version:(previous?.version??0)+1}));}
@@ -23,10 +23,10 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
   const people=[{member:me,point:own,label:'You',own:true},{member:partner,point:other,label:partner?.name||'Your person',own:false}].filter(person=>!full||!query||`${person.label} ${person.member?.name||''}`.toLowerCase().includes(query.toLowerCase()));
   return <section className={`location-panel ${full?'location-full':''}`} aria-label="Shared locations">
     {!full&&<div className="section-heading"><h2>Location</h2>{onOpenMap&&<button className="text-button" onClick={onOpenMap}>View map<ChevronRight size={16}/></button>}</div>}
-    {full&&(mapAllowed?<SharedMap points={points} focusRequest={focusRequest}/>:<div className="map-consent">
+    {full&&(mapAllowed?<SharedMap points={points} dark={dark} focusRequest={focusRequest}/>:<div className="map-consent">
       <MapPin size={26}/>
       <h3>Your shared map</h3>
-      <small>OpenStreetMap receives your IP address and the map area you view. Amie draws your saved pins on the map.</small>
+      <small>OpenFreeMap receives your IP address and the map area you view. Amie draws your saved pins on the map.</small>
       <button className="button secondary" onClick={()=>onMapAllowed(true)}>Load map</button>
     </div>)}
     <div className={full?'map-dock':'location-summary'}>
