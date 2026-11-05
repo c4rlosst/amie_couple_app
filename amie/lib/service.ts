@@ -61,12 +61,32 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
         if(me.avatar_version)await env.BUCKET.delete(`avatars/${uid}/${me.avatar_version}`).catch(()=>console.warn('Old profile photo cleanup deferred'));
         return json({ok:true});
       }
-      const id = crypto.randomUUID(); const key = `${me.space_id}/${id}`; const mime = jpeg ? 'image/jpeg' : 'image/png';
+      const requestedId=form.get('id');
+      check(requestedId===null||typeof requestedId==='string'&&/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/.test(requestedId),'Please retry sending this photo.');
+      const id = requestedId ?? crypto.randomUUID();
+      // Each attempt owns its object so a losing retry cannot overwrite the saved image.
+      const key = `${me.space_id}/${crypto.randomUUID()}`;
+      const mime = jpeg ? 'image/jpeg' : 'image/png';
+      const savedPhoto=()=>db.prepare("SELECT created_at,file_key FROM messages WHERE id=? AND space_id=? AND sender_id=? AND kind='photo'").bind(id,me.space_id,uid).first<{created_at:number;file_key:string}>();
+      const existing=await savedPhoto();
+      if(existing)return json({ok:true,id,createdAt:existing.created_at});
       await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:mime}});
-      try { await db.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,file_key,mime,created_at) VALUES (?,?,?,?,?,?,?,?)').bind(id,me.space_id,uid,'photo',text(form.get('caption'),1000),key,mime,now).run(); }
-      catch(error) { await env.BUCKET.delete(key); throw error; }
+      let inserted;
+      try { inserted=await db.prepare('INSERT INTO messages (id,space_id,sender_id,kind,body,file_key,mime,created_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(id,me.space_id,uid,'photo',text(form.get('caption'),1000),key,mime,now).run(); }
+      catch(error) {
+        const saved=await savedPhoto().catch(()=>undefined);
+        if(saved?.file_key===key){onActivity?.(id,'photo');return json({ok:true,id,createdAt:saved.created_at});}
+        if(saved!==undefined)await env.BUCKET.delete(key).catch(()=>console.warn('Photo cleanup deferred'));
+        throw error;
+      }
+      if(!inserted.meta.changes){
+        await env.BUCKET.delete(key).catch(()=>console.warn('Photo cleanup deferred'));
+        const saved=await savedPhoto();
+        if(!saved)throw new Problem(409,'Please choose the photo again.');
+        return json({ok:true,id,createdAt:saved.created_at});
+      }
       onActivity?.(id,'photo');
-      return json({ok:true,id});
+      return json({ok:true,id,createdAt:now});
     }
     const body = await request.json() as Record<string,unknown>;
     const action = body.action;

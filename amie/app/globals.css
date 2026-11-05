@@ -95,6 +95,11 @@ html { -webkit-text-size-adjust:100%; scroll-padding-block:24px; }
 .app-shell, .main-shell, main, .home-columns > *, .settings-grid > *, .moments-grid > * { min-width:0; }
 .message, .section-heading h2, .partner-summary > div, .settings-link > span { overflow-wrap:anywhere; }
 .photo-loading { display:grid; min-height:120px; place-items:center; color:var(--faint); font-size:13px; }
+.photo-skeleton { display:block; width:100%; border-radius:8px; background:var(--surface-pressed); animation:photo-placeholder 1.5s ease-in-out infinite alternate; }
+.photo-thumb > .photo-skeleton { height:130px; margin:0; }
+.moment-card > .photo-skeleton { aspect-ratio:1; margin:0; border-radius:0; }
+@media (max-width:600px) { .photo-thumb > .photo-skeleton { height:112px; } }
+@keyframes photo-placeholder { from { opacity:1; } to { opacity:.58; } }
 @media (max-width:900px) {
   .sidebar, .desktop-topline { display:none; }
   .main-shell { margin-left:0; }
@@ -567,6 +572,10 @@ body:has(.screen-map) { position:fixed; inset:0; width:100%; overflow:hidden; }
 .chat-photo { min-width:0; width:max-content; max-width:100%; }
 .chat-photo img { display:block; width:auto; height:auto; max-width:100%; max-height:340px; border-radius:17px; animation:chat-image-in 180ms ease-out both; }
 .chat-photo .photo-loading { min-width:120px; min-height:100px; }
+.chat-photo .photo-skeleton { width:min(220px,62vw); aspect-ratio:4/3; border-radius:17px; }
+.chat-delivery { padding-inline:4px; font-size:12px; color:var(--muted); }
+.chat-delivery.failed { display:flex; align-items:center; gap:8px; color:var(--danger); }
+.chat-delivery.failed .text-button { font-size:12px; }
 @keyframes chat-image-in { from { opacity:0; } to { opacity:1; } }
 .conversation-person { min-width:0; }
 @media (max-width:900px) {

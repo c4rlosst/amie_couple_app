@@ -9,7 +9,7 @@ import ProfilePhotoEditor from './profile-photo-editor';
 import NotificationSettings from './notification-settings';
 import LocationPanel from './location-panel';
 import MomentsCalendar from './moments-calendar';
-import ChatMessages, {type ChatMessage} from './chat-messages';
+import ChatMessages, {type ChatMessage, type PendingPhoto} from './chat-messages';
 import {AppearanceSettings, type useAppearance} from './appearance';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Heart, House, MessageCircle, Images, Users, Moon, Sun, MapPin, ArrowUpRight, Send, Plus, X, Copy, Check, RefreshCw, Settings2, ChevronLeft, ChevronRight, ArrowUp, Camera, LoaderCircle, Download, LogOut, LockKeyhole, Coffee } from 'lucide-react';
@@ -38,8 +38,19 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
   function allowMap(value:boolean){setMapAllowed(value);try{if(value)localStorage.setItem('amie.map.openfreemap.v1','on');else localStorage.removeItem('amie.map.openfreemap.v1');}catch{}}
   const [error,setError] = useState(''); const [notice,setNotice] = useState(''); const [loading,setLoading] = useState(signedIn); const [busy,setBusy] = useState(false);
   const [modal,setModal] = useState<'setup'|'invite'|'photo'|'install'|null>(null); const [join,setJoin] = useState(false); const [name,setName] = useState(''); const [code,setCode] = useState(''); const [invite,setInvite] = useState(''); const [copied,setCopied] = useState(false);
+  const [pendingPhotos,setPendingPhotos]=useState<PendingPhoto[]>([]);
+  const [sentPreviews,setSentPreviews]=useState<Record<string,string>>({});
+  const photoUploads=useRef(new Map<string,AbortController>());
+  const photoUrls=useRef(new Set<string>());
+  useEffect(()=>()=>{
+    for(const upload of photoUploads.current.values())upload.abort();
+    for(const url of photoUrls.current)URL.revokeObjectURL(url);
+  },[]);
   const [draft,setDraft] = useState(''); const [caption,setCaption] = useState(''); const [photo,setPhoto] = useState<File|null>(null);
   const [watching,setWatching] = useState(false); const watcher = useRef<number|null>(null); const sharingSession=useRef(0); const lastLocation=useRef(0); const locationRequest=useRef<Promise<unknown>|null>(null); const [anniversary,setAnniversary] = useState(''); const messageList=useRef<HTMLDivElement>(null); const nearLatest=useRef(true); const scrollingChat=useRef(false);
+  const messages=data?.messages??[];
+  const chatMessages=[...messages.filter(message=>!pendingPhotos.some(item=>item.id===message.id)),...pendingPhotos]
+    .sort((a,b)=>a.created_at-b.created_at||a.id.localeCompare(b.id));
   const me=data?.me; const partner=data?.partner; const paired=!!data?.space;
   const loveKey=me?`amie.love.${me.id}`:null;
   const latestLove=data?.messages.findLast(message=>message.kind==='tap'&&message.sender_id===me?.id)?.created_at??0;
@@ -102,9 +113,9 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
   },[tab]);
   useLayoutEffect(()=>{
     if(tab!=='messages')return;
-    const list=messageList.current;const latest=data?.messages.at(-1);
+    const list=messageList.current;const latest=chatMessages.at(-1);
     if(list&&(nearLatest.current||latest?.sender_id===me?.id)){list.scrollTop=list.scrollHeight;nearLatest.current=true;}
-  },[data?.messages.at(-1)?.id,tab,me?.id]);
+  },[chatMessages.at(-1)?.id,tab,me?.id]);
   useEffect(()=>()=>{if(watcher.current!==null)navigator.geolocation.clearWatch(watcher.current);},[]);
   useEffect(()=>{if(!modal)return;const previous=document.activeElement as HTMLElement|null;const dialog=document.querySelector<HTMLDialogElement>('dialog');dialog?.showModal(); const esc=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();setModal(null);}};document.addEventListener('keydown',esc);return()=>{document.removeEventListener('keydown',esc);dialog?.close();previous?.focus();};},[modal]);
   function requireSpace() { if(!signedIn){onSignIn();return false;} if(!paired){setModal('setup');return false;} return true; }
@@ -119,10 +130,57 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
   }
   async function stopLocation() { sharingSession.current++;if(watcher.current!==null)navigator.geolocation.clearWatch(watcher.current);watcher.current=null;setWatching(false);await locationRequest.current?.catch(()=>{});await run(()=>act('stop-location'),'Your saved location has been removed.'); }
   async function sendMessage(e:React.FormEvent) {e.preventDefault();if(!draft.trim()||!requireSpace())return;const body=draft;await run(async()=>{await act('message',{body,id:crypto.randomUUID()});setDraft('');});}
-  async function sendPhoto(e:React.FormEvent) {e.preventDefault();if(!photo||!requireSpace())return;await run(async()=>{
-    const image=await createImageBitmap(photo);const scale=Math.min(1,1800/Math.max(image.width,image.height));const canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);const ctx=canvas.getContext('2d');if(!ctx)throw new Error('This photo could not be prepared.');ctx.drawImage(image,0,0,canvas.width,canvas.height);image.close();
-    const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Please choose another photo.')),'image/jpeg',0.86));const form=new FormData();form.set('photo',blob,'moment.jpg');form.set('caption',caption);const res=await apiFetch('/api/amie',{method:'POST',body:form});const result=await res.json() as {error?:string};if(!res.ok)throw new Error(result.error);await refresh();setModal(null);setPhoto(null);setCaption('');setNotice('A little moment, shared.');
-  });}
+  function releasePhotoPreview(id:string){
+    const url=sentPreviews[id];
+    if(!url)return;
+    URL.revokeObjectURL(url);
+    photoUrls.current.delete(url);
+    setSentPreviews(previous=>{const next={...previous};delete next[id];return next;});
+  }
+  async function uploadPhoto(pending:PendingPhoto){
+    if(photoUploads.current.has(pending.id))return;
+    const controller=new AbortController();
+    photoUploads.current.set(pending.id,controller);
+    setPendingPhotos(previous=>previous.map(item=>item.id===pending.id?{...item,delivery:'sending'}:item));
+    try{
+      const image=await createImageBitmap(pending.file);
+      const scale=Math.min(1,1800/Math.max(image.width,image.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(image.width*scale));
+      canvas.height=Math.max(1,Math.round(image.height*scale));
+      try{
+        const ctx=canvas.getContext('2d');
+        if(!ctx)throw new Error('This photo could not be prepared.');
+        ctx.drawImage(image,0,0,canvas.width,canvas.height);
+      }finally{image.close();}
+      const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Please choose another photo.')),'image/jpeg',0.86));
+      if(controller.signal.aborted)return;
+      const form=new FormData();
+      form.set('photo',blob,'moment.jpg');form.set('caption',pending.body);form.set('id',pending.id);
+      const response=await apiFetch('/api/amie',{method:'POST',body:form,signal:controller.signal});
+      const result=await response.json() as {id?:string;createdAt?:number};
+      if(!response.ok||!result.id)throw new Error('Photo could not be sent.');
+      if(controller.signal.aborted)return;
+      const saved:ChatMessage={id:result.id,sender_id:pending.sender_id,kind:'photo',body:pending.body,created_at:result.createdAt??pending.created_at};
+      setSentPreviews(previous=>({...previous,[saved.id]:pending.preview}));
+      setData(previous=>previous&&!previous.messages.some(message=>message.id===saved.id)
+        ?{...previous,messages:[...previous.messages,saved].sort((a,b)=>a.created_at-b.created_at||a.id.localeCompare(b.id)).slice(-200)}
+        :previous);
+      setPendingPhotos(previous=>previous.filter(item=>item.id!==pending.id));
+      void refresh().catch(()=>{});
+    }catch{
+      if(!controller.signal.aborted)setPendingPhotos(previous=>previous.map(item=>item.id===pending.id?{...item,delivery:'failed'}:item));
+    }finally{photoUploads.current.delete(pending.id);}
+  }
+  function sendPhoto(event:React.FormEvent){
+    event.preventDefault();
+    if(!photo||!me||!requireSpace())return;
+    const pending:PendingPhoto={id:crypto.randomUUID(),sender_id:me.id,kind:'photo',body:caption.trim(),created_at:Date.now(),file:photo,preview:URL.createObjectURL(photo),delivery:'sending'};
+    photoUrls.current.add(pending.preview);
+    setPendingPhotos(previous=>[...previous,pending]);
+    setModal(null);setPhoto(null);setCaption('');setTab('messages');
+    void uploadPhoto(pending);
+  }
   const photos=data?.messages.filter(m=>m.kind==='photo')||[];
   const greeting=new Date().getHours()<12?'Good morning':new Date().getHours()<18?'Good afternoon':'Good evening';
   const days=data?.space?.anniversary?Math.max(1,Math.floor((Date.now()-new Date(data.space.anniversary+'T00:00:00').getTime())/86400000)+1):null;
@@ -145,7 +203,7 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
       <section className="moments-preview"><div className="section-heading"><div><h2>Recent moments</h2><p>Your day, shared.</p></div><button className="text-button" onClick={()=>setTab('moments')}>View all<ChevronRight size={16}/></button></div><div className="photo-strip">{photos.slice(-3).map(p=><button className="photo-thumb" key={p.id} onClick={()=>setTab('moments')}><SecurePhoto id={p.id} alt={p.body||'A shared moment'} loading="lazy"/><span>{p.body||'A moment together'}</span></button>)}<button className="add-moment" onClick={openPhoto}><span><Camera size={25}/></span><strong>Add a photo</strong><small>Share a moment from today.</small></button>{!photos.length&&<div className="moment-placeholder"><span>♡</span><p>Someday, these will be<br/>your favorite little memories.</p></div>}</div></section>
       </>}
       {tab==='map'&&<LocationPanel me={me} partner={partner} watching={watching} busy={busy} onShare={startLocation} onStop={stopLocation} mapAllowed={mapAllowed} onMapAllowed={allowMap} dark={dark} full/>}
-      {tab==='messages'&&<section className="panel conversation"><div className="conversation-heading"><button type="button" className="icon-button conversation-back" aria-label="Back to Home" onClick={()=>matchMedia('(prefers-reduced-motion: reduce)').matches?setTab('home'):setLeavingMessages(true)}><ChevronLeft size={26}/></button><Avatar id={partner?.id} version={partner?.avatar_version} name={partner?.name||'Your person'} partner small/><div className="conversation-person"><h2>{partner?.name||'Your person'}</h2><span>{partner?`Last seen in Amie ${ago(partner.last_seen)}`:'Your conversation starts here'}</span></div><LockKeyhole size={17}/></div><div ref={messageList} className="message-list" role="log" tabIndex={0} aria-label="Conversation" aria-live="polite" aria-relevant="additions" onScroll={event=>{const list=event.currentTarget;if(!scrollingChat.current)nearLatest.current=list.scrollHeight-list.scrollTop-list.clientHeight<=8;}}><div className="message-thread">{!data?.messages.length&&<div className="empty-state"><MessageCircle size={35}/><h3>Say hello.</h3><p>Send a message or photo to your person.</p>{!paired&&<button className="button primary" onClick={()=>requireSpace()}>Connect with my person</button>}</div>}{data&&<ChatMessages messages={data.messages} userId={me?.id}/>}</div></div><form className="message-composer" onSubmit={sendMessage}><button type="button" className="icon-button" aria-label="Send a photo" onClick={openPhoto}><Plus size={22}/></button><div className="composer-field"><input aria-label="Message" value={draft} onChange={e=>setDraft(e.target.value)} maxLength={4000} placeholder="Message your partner…"/><button className="send-button" aria-label="Send message" disabled={busy||!draft.trim()}><ArrowUp size={21}/></button></div></form><p className="conversation-note">Updates while open. Latest 200 messages.</p></section>}
+      {tab==='messages'&&<section className="panel conversation"><div className="conversation-heading"><button type="button" className="icon-button conversation-back" aria-label="Back to Home" onClick={()=>matchMedia('(prefers-reduced-motion: reduce)').matches?setTab('home'):setLeavingMessages(true)}><ChevronLeft size={26}/></button><Avatar id={partner?.id} version={partner?.avatar_version} name={partner?.name||'Your person'} partner small/><div className="conversation-person"><h2>{partner?.name||'Your person'}</h2><span>{partner?`Last seen in Amie ${ago(partner.last_seen)}`:'Your conversation starts here'}</span></div><LockKeyhole size={17}/></div><div ref={messageList} className="message-list" role="log" tabIndex={0} aria-label="Conversation" aria-live="polite" aria-relevant="additions" onScroll={event=>{const list=event.currentTarget;if(!scrollingChat.current)nearLatest.current=list.scrollHeight-list.scrollTop-list.clientHeight<=8;}}><div className="message-thread">{!chatMessages.length&&<div className="empty-state"><MessageCircle size={35}/><h3>Say hello.</h3><p>Send a message or photo to your person.</p>{!paired&&<button className="button primary" onClick={()=>requireSpace()}>Connect with my person</button>}</div>}{data&&<ChatMessages messages={chatMessages} userId={me?.id} onRetryPhoto={uploadPhoto} previews={sentPreviews} onPhotoReady={releasePhotoPreview}/>}</div></div><form className="message-composer" onSubmit={sendMessage}><button type="button" className="icon-button" aria-label="Send a photo" onClick={openPhoto}><Plus size={22}/></button><div className="composer-field"><input aria-label="Message" value={draft} onChange={e=>setDraft(e.target.value)} maxLength={4000} placeholder="Message your partner…"/><button className="send-button" aria-label="Send message" disabled={busy||!draft.trim()}><ArrowUp size={21}/></button></div></form><p className="conversation-note">Updates while open. Latest 200 messages.</p></section>}
       {tab==='moments'&&<MomentsCalendar spaceId={data?.space?.id} recent={photos} userId={me?.id} partnerName={partner?.name}/>}
       {tab==='us'&&<div className="settings-grid"><section className="panel story-panel"><span className="story-heart">♡</span><h2>{me?.name||'You'} & {partner?.name||'your person'}</h2><p>{days?<><strong>{days}</strong> days of us.</>:'Every story has a first day.'}</p>{paired?<form onSubmit={e=>{e.preventDefault();run(()=>act('anniversary',{date:anniversary}),'Your first day, remembered.');}}><label htmlFor="anniversary">Our first day</label><div className="field-action"><input type="date" id="anniversary" required max={new Date().toLocaleDateString('en-CA')} value={anniversary||data?.space?.anniversary||''} onChange={e=>setAnniversary(e.target.value)}/><button className="button secondary" disabled={busy}>Save</button></div></form>:<button className="button primary" onClick={()=>requireSpace()}>Start our story</button>}</section><section className="panel settings-panel"><h2>Preferences</h2>{signedIn&&me&&<ProfilePhotoEditor member={me} onSaved={async message=>{await refresh();setNotice(message);}}/>}{paired&&<form onSubmit={e=>{e.preventDefault();run(()=>act('profile',{name}),'Your name has been updated.');}}><label htmlFor="name">What should we call you?</label><div className="field-action"><input id="name" placeholder={me?.name||'Your name'} value={name} onChange={e=>setName(e.target.value)} maxLength={40} required/><button className="button secondary" disabled={busy}>Save</button></div></form>}<AppearanceSettings appearance={appearance} onChange={saveAppearance}/>{signedIn&&<NotificationSettings/>}{paired&&!partner&&<button className="settings-link" onClick={openInvite}><Users size={19}/><span>Invite your partner<small>Get a fresh code, valid for 24 hours.</small></span><ChevronRight size={18}/></button>}<button className="settings-link" onClick={()=>setModal('install')}><Download size={19}/><span>Add Amie to Home Screen<small>A little closer, one tap away.</small></span><ChevronRight size={18}/></button><button className="settings-link" onClick={()=>run(refresh)}><RefreshCw size={19}/><span>Refresh our space</span></button>{signedIn&&<button className="settings-link" onClick={()=>run(onSignOut)}><LogOut size={19}/><span>Sign out</span></button>}</section><section className="panel privacy-panel"><LockKeyhole size={21}/><div><h3>Sharing, on your terms.</h3><p>Locations update only while Amie is open and sharing is enabled on this device. Your last shared location stays visible until you remove it. Bedtime is a status you choose, not sleep detection. “Last seen” means last seen in Amie.</p>{(watching||me?.location_at)&&<button className="text-button" onClick={stopLocation}>Stop sharing & remove my location</button>}<p>Messages and photos are access-controlled, but aren’t end-to-end encrypted. Invite codes connect two Amie accounts. Only the two members can access your shared space.</p></div></section></div>}
       <footer className="app-footer"><Heart size={12}/> A little space. A lot of us.</footer>

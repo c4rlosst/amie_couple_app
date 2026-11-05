@@ -30,6 +30,28 @@ test('location validation and removal apply to the current user only',async()=>{
 test('anniversary rejects future and impossible dates',async()=>{const {call,paired}=fixture();await paired();assert.equal((await call('a',{action:'anniversary',date:'2099-01-01'})).status,400);assert.equal((await call('a',{action:'anniversary',date:'2025-02-30'})).status,400);assert.equal((await call('a',{action:'anniversary',date:'2025-02-14'})).status,200);assert.equal((await call('b')).space.anniversary,'2025-02-14');});
 test('photo uploads enforce type and photo retrieval enforces space membership',async()=>{const {call,paired,env}=fixture();await paired();const form=new FormData();form.set('photo',new Blob([new Uint8Array([255,216,255,224,1,2,3])],{type:'image/jpeg'}),'photo.jpg');form.set('caption','Our moment');const upload=await handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:form}),env,'a');assert.equal(upload.status,200);const {id}=await upload.json();assert.equal((await getPhoto(env,'b',id)).status,200);await call('c',{action:'create',name:'Cam'});assert.equal((await getPhoto(env,'c',id)).status,404);assert.equal((await getPhoto(env,null,id)).status,401);const invalid=new FormData();invalid.set('photo',new Blob(['<svg/>'],{type:'image/svg+xml'}),'bad.svg');assert.equal((await handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:invalid}),env,'a')).status,400);});
 
+test('photo retries keep one chat item and one notification, including simultaneous attempts',async()=>{
+  const {call,paired,env}=fixture();
+  await paired();
+  const id=crypto.randomUUID();
+  const events=[];
+  const send=(uid,byte)=>{
+    const form=new FormData();
+    form.set('id',id);
+    form.set('photo',new Blob([new Uint8Array([255,216,255,224,byte])],{type:'image/jpeg'}),'photo.jpg');
+    return handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:form}),env,uid,'Person',(...event)=>events.push(event));
+  };
+  const results=await Promise.all([send('a',1),send('a',1)]);
+  assert.deepEqual(results.map(result=>result.status),[200,200]);
+  assert.equal((await results[0].json()).id,id);
+  assert.equal((await results[1].json()).id,id);
+  assert.equal((await send('b',2)).status,409);
+  const saved=await getPhoto(env,'b',id);
+  assert.equal(new Uint8Array(await saved.arrayBuffer()).at(-1),1);
+  assert.equal((await call('b')).messages.length,1);
+  assert.deepEqual(events,[[id,'photo']]);
+});
+
 async function uploadAvatar(env,uid,bytes=new Uint8Array([255,216,255,224,1,2,3])){
   const form=new FormData();form.set('purpose','avatar');form.set('photo',new Blob([bytes],{type:'image/jpeg'}),'profile.jpg');
   form.set('member_id','b'); // Client-supplied owner fields must never choose the edited profile.
