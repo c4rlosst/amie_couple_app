@@ -37,7 +37,7 @@ export default function Amie({signedIn,onSignIn,onSignOut}:{signedIn:boolean;onS
   useEffect(()=> { if(!signedIn)return; let alive=true; const pull=()=>refresh().catch(e=>{if(alive)setError(e.message);}).finally(()=>{if(alive)setLoading(false);});pull();const timer=setInterval(()=>{if(document.visibilityState==='visible')pull();},10000);const visible=()=>{if(document.visibilityState==='visible')pull();};document.addEventListener('visibilitychange',visible);return()=>{alive=false;clearInterval(timer);document.removeEventListener('visibilitychange',visible);};},[refresh,signedIn]);
   useEffect(()=>{if(!paired)return;const beat=()=>{if(document.visibilityState==='visible')act('heartbeat').catch(()=>{});};beat();const timer=setInterval(beat,45000);return()=>clearInterval(timer);},[paired,act]);
   useEffect(()=>{window.scrollTo(0,0);},[tab]);
-  useEffect(()=>{const theme=document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');if(theme)theme.content=tab==='map'?(darkMap?'#202426':'#edf1ec'):'#f5f5f7';},[tab,darkMap]);
+  useEffect(()=>{const theme=document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');if(theme)theme.content=tab==='map'?(darkMap?'#202426':'#deddf0'):'#f5f5f7';},[tab,darkMap]);
   useEffect(()=>{
     const hash=()=>{if(window.location.hash==='#messages')setTab('messages');};
     const pushed=(event:MessageEvent)=>{if(event.data?.type==='AMIE_OPEN_MESSAGES')setTab('messages');if(signedIn&&['AMIE_PUSH','AMIE_OPEN_MESSAGES'].includes(event.data?.type))refresh().catch(()=>{});};
