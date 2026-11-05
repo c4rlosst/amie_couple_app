@@ -17,7 +17,7 @@ No invented messages or locations are seeded in production. Location sharing doe
 
 ## Independent website and accounts
 
-Open **https://c4rlosst.github.io/couple_app/**. GitHub Pages serves the interface; the independent API runs at `https://amie-api.amie-c4rlosst.workers.dev` in the app owner’s Cloudflare account, with D1 storage. No ChatGPT account is required.
+Open **https://c4rlosst.github.io/amie_couple_app/**. GitHub Pages serves the interface; the independent API runs at `https://amie-api.amie-c4rlosst.workers.dev` in the app owner’s Cloudflare account, with D1 storage. No ChatGPT account is required.
 
 Create an Amie account with a username and a password of at least 12 characters, then create a space or enter your partner’s invitation code. Passwords use PBKDF2-SHA256 with a random salt; bearer sessions expire after 30 days and are revoked on sign-out. Save your password: password recovery is not yet available.
 
@@ -29,7 +29,7 @@ GitHub Actions deploys frontend changes on pushes to `main`. Backend schema and 
 
 `npx vite build --config vite.pages.config.ts`
 
-Output: `dist-pages/`, with `/couple_app/` asset paths and a scoped Home Screen manifest/service worker. No API secrets are bundled in the frontend.
+Output: `dist-pages/`, with `/amie_couple_app/` asset paths and a scoped Home Screen manifest/service worker. No API secrets are bundled in the frontend.
 
 ## Local development
 

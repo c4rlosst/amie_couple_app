@@ -7,7 +7,7 @@ import {pushRoute,notifyPartner,notifyNearby,validEndpoint} from '../lib/push.ts
 import {handleAmie} from '../lib/service.ts';
 
 const b64=value=>Buffer.from(value).toString('base64url');
-async function keys(){const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);return {VAPID_PUBLIC_KEY:b64(await crypto.subtle.exportKey('raw',pair.publicKey)),VAPID_PRIVATE_KEY:(await crypto.subtle.exportKey('jwk',pair.privateKey)).d,VAPID_SUBJECT:'https://c4rlosst.github.io/couple_app/'};}
+async function keys(){const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);return {VAPID_PUBLIC_KEY:b64(await crypto.subtle.exportKey('raw',pair.publicKey)),VAPID_PRIVATE_KEY:(await crypto.subtle.exportKey('jwk',pair.privateKey)).d,VAPID_SUBJECT:'https://c4rlosst.github.io/amie_couple_app/'};}
 async function subscription(id){const pair=await crypto.subtle.generateKey({name:'ECDH',namedCurve:'P-256'},true,['deriveBits']);return {pair,endpoint:`https://web.push.apple.com/${id}`,keys:{p256dh:b64(await crypto.subtle.exportKey('raw',pair.publicKey)),auth:b64(crypto.getRandomValues(new Uint8Array(16)))}};}
 async function fixture(){
   const sqlite=new DatabaseSync(':memory:');
@@ -115,15 +115,15 @@ test('nearby alerts use fresh accurate fixes and send once per approach to the p
 
 test('service worker always displays received pushes and opens the appropriate Amie tab',async()=>{
   const handlers={};const shown=[];const posted=[];const opened=[];
-  const self={registration:{scope:'https://c4rlosst.github.io/couple_app/',showNotification:async(...args)=>shown.push(args)},addEventListener:(name,fn)=>handlers[name]=fn,clients:{matchAll:async()=>[],openWindow:async url=>opened.push(url)}};
+  const self={registration:{scope:'https://c4rlosst.github.io/amie_couple_app/',showNotification:async(...args)=>shown.push(args)},addEventListener:(name,fn)=>handlers[name]=fn,clients:{matchAll:async()=>[],openWindow:async url=>opened.push(url)}};
   vm.runInNewContext(readFileSync(new URL('../public/sw.js',import.meta.url),'utf8'),{self,URL});
   let pending;handlers.push({data:{json:()=>({body:'New photo',tag:'photo-1',url:'https://evil.test'})},waitUntil:p=>pending=p});await pending;assert.equal(shown[0][0],'Amie');assert.equal(shown[0][1].body,'New photo');
   handlers.push({data:{json:()=>{throw new Error();}},waitUntil:p=>pending=p});await pending;assert.equal(shown.length,2);
-  handlers.notificationclick({notification:{close(){}},waitUntil:p=>pending=p});await pending;assert.equal(opened[0],'https://c4rlosst.github.io/couple_app/#messages');
-  self.clients.matchAll=async()=>[{url:'https://c4rlosst.github.io/couple_app/',postMessage:message=>posted.push(message),focus:async()=>{}}];
+  handlers.notificationclick({notification:{close(){}},waitUntil:p=>pending=p});await pending;assert.equal(opened[0],'https://c4rlosst.github.io/amie_couple_app/#messages');
+  self.clients.matchAll=async()=>[{url:'https://c4rlosst.github.io/amie_couple_app/',postMessage:message=>posted.push(message),focus:async()=>{}}];
   handlers.notificationclick({notification:{close(){}},waitUntil:p=>pending=p});await pending;assert.equal(posted[0].type,'AMIE_OPEN_MESSAGES');assert.equal(opened.length,1);
   handlers.push({data:{json:()=>({body:'Bea is close!',tab:'map'})},waitUntil:p=>pending=p});await pending;
   handlers.notificationclick({notification:{close(){},data:shown.at(-1)[1].data},waitUntil:p=>pending=p});await pending;assert.equal(posted.at(-1).type,'AMIE_OPEN_MAP');
   self.clients.matchAll=async()=>[];
-  handlers.notificationclick({notification:{close(){},data:{tab:'map'}},waitUntil:p=>pending=p});await pending;assert.equal(opened.at(-1),'https://c4rlosst.github.io/couple_app/#map');
+  handlers.notificationclick({notification:{close(){},data:{tab:'map'}},waitUntil:p=>pending=p});await pending;assert.equal(opened.at(-1),'https://c4rlosst.github.io/amie_couple_app/#map');
 });

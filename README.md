@@ -2,7 +2,7 @@
 
 A private, mobile-first couple web app with a minimal iPhone-style interface.
 
-**[Open Amie](https://c4rlosst.github.io/couple_app/)**
+**[Open Amie](https://c4rlosst.github.io/amie_couple_app/)**
 
 The website runs independently on GitHub Pages with its own Amie accounts. Pushes to `main` automatically deploy the interface. A separate authenticated API stores shared messages, photos, and locations; no ChatGPT login is needed.
 
