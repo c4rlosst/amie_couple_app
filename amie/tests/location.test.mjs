@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {locationPoint,distanceMetres,formatDistance,locationAge} from '../lib/location.ts';
+import {locationPoint,distanceMetres,formatDistance,locationAge,mapLongitude} from '../lib/location.ts';
 
 const member=(latitude,longitude,extra={})=>({id:'a',name:'Your person',latitude,longitude,accuracy:15,location_at:1000,...extra});
 test('shared locations accept zero coordinates and reject missing or invalid fixes',()=>{
@@ -17,6 +17,7 @@ test('distance is geographical and handles the equator, identical points and the
   assert.ok(Math.abs(distanceMetres(point(0,179),point(0,-179))-222390)<10);
   const londonToNewYork=distanceMetres(point(51.5074,-.1278),point(40.7128,-74.006));
   assert.ok(londonToNewYork>5500000&&londonToNewYork<5650000);
+  assert.equal(mapLongitude(-179,179),181);
 });
 test('distance and freshness labels distinguish metres, kilometres and old locations',()=>{
   assert.equal(formatDistance(4),'4 m');assert.equal(formatDistance(1234),'1.2 km');

@@ -32,8 +32,6 @@ jobs:
         working-directory: amie
       - run: npx vite build --config vite.pages.config.ts
         working-directory: amie
-        env:
-          VITE_MAPKIT_TOKEN: ${{ secrets.VITE_MAPKIT_TOKEN }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

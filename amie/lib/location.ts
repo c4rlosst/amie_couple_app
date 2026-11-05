@@ -15,3 +15,4 @@ export function locationAge(time:number,now=Date.now()){
   const minutes=Math.max(0,Math.floor((now-time)/60000));
   return minutes<1?'Updated just now':minutes<60?`Updated ${minutes} min ago`:minutes<1440?`Updated ${Math.floor(minutes/60)} hr ago`:`Updated ${Math.floor(minutes/1440)} ${minutes<2880?'day':'days'} ago`;
 }
+export function mapLongitude(longitude:number,anchor:number){return anchor+((longitude-anchor+540)%360)-180;}

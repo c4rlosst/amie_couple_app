@@ -55,9 +55,7 @@ Open the hosted HTTPS URL in Safari, then Share → Add to Home Screen to instal
 
 ## Maps
 
-The Map tab uses Apple's MapKit JS. Map appearance is saved on this device and System follows the device's color scheme. Loading Apple Maps connects to Apple and requests the area the device is viewing. Amie adds saved pins and accuracy circles as annotations on the page. Loading the map is a per-device choice and Hide map clears that choice.
-
-Create a domain-restricted [MapKit JS token](https://developer.apple.com/documentation/mapkitjs/creating-a-maps-token) for `c4rlosst.github.io` and add it to the repository's Actions secrets as `VITE_MAPKIT_TOKEN`. GitHub Pages passes the token into the public web build, so use a domain-restricted browser token. For local testing, set `VITE_MAPKIT_TOKEN` in the shell that runs Vite and use a token valid for that host. If the token is unavailable, saved locations can still be opened using the Apple Maps links.
+The Map tab uses Leaflet and OpenStreetMap tiles. Map appearance is saved on this device and System follows the device's color scheme. Loading the map connects to OpenStreetMap and requests tiles for the area in view. Amie draws saved pins and accuracy circles on the page. Loading the map is a per-device choice and Hide map clears that choice.
 
 The sheet searches only the two members' names. Selecting a result centers its saved pin; Show both locations fits both pins. Timestamps and accuracy stay visible in the expanded card, and fixes older than five minutes are marked as potentially out of date. Distances are between saved positions, not routes or travel times. Maps do not start location sharing automatically, and web apps cannot continuously update GPS while closed.
 
