@@ -16,8 +16,7 @@ export default function SharedMap({points,focusRequest}:{points:MapPoint[];focus
       if(disposed||!container.current)return;
       const instance=L.map(container.current,{zoomControl:false,scrollWheelZoom:false,attributionControl:false,worldCopyJump:true});map.current=instance;
       L.control.zoom({position:'topright'}).addTo(instance);
-      L.control.attribution({position:'topleft',prefix:false}).addTo(instance);
-      const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:1,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'}).addTo(instance);
+      const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:1}).addTo(instance);
       tiles.on('tileerror',()=>{if(!disposed)setTilesFailed(true);});tiles.on('tileload',()=>{if(!disposed)setTilesFailed(false);});
       const layers=L.layerGroup().addTo(instance);let signature='';let fitted=false;
       const pins=new Map<string,{marker:Marker;circle:Circle;label:string}>();
@@ -34,14 +33,20 @@ export default function SharedMap({points,focusRequest}:{points:MapPoint[];focus
             const element=document.createElement('div');element.className=`map-person-pin ${point.own?'own':'partner'}`;
             const initials=document.createElement('span');initials.textContent=label.trim().split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase();element.appendChild(initials);
             const tooltip=document.createElement('span');tooltip.textContent=label;
-            const marker=L.marker(position,{icon:L.divIcon({className:'map-person-marker',html:element,iconSize:point.own?[24,24]:[38,38],iconAnchor:point.own?[12,12]:[19,19]}),title:label,alt:`${label}'s last shared location`}).bindTooltip(tooltip.innerHTML,{permanent:true,direction:'top',offset:[0,point.own?-18:-24],className:'map-person-label'}).addTo(layers);
+            const marker=L.marker(position,{icon:L.divIcon({className:'map-person-marker',html:element,iconSize:point.own?[18,18]:[34,34],iconAnchor:point.own?[9,9]:[17,17]}),title:label,alt:`${label}'s last shared location`}).addTo(layers);
+            if(!point.own)marker.bindTooltip(tooltip.innerHTML,{permanent:true,direction:'top',offset:[0,-21],className:'map-person-label'});
             const circle=L.circle(position,{radius:Math.min(20000000,Math.max(1,point.accuracy??0)),color,fillColor:color,fillOpacity:.08,weight:1,interactive:false}).addTo(layers);
             marker.getElement()?.setAttribute('aria-label',`${label}'s last shared location`);
             pin={marker,circle,label};pins.set(point.id,pin);
           }
           pin.marker.setLatLng(position);pin.circle.setLatLng(position).setRadius(Math.min(20000000,Math.max(1,point.accuracy??0))).setStyle({opacity:point.accuracy===null?0:1,fillOpacity:point.accuracy===null?0:.08});if(!focusId||point.id===focusId)bounds.extend(position);
         }
-        if(current.length&&(fit||!fitted||signature!==ids)){instance.fitBounds(bounds,{paddingTopLeft:[48,96],paddingBottomRight:[48,Math.max(48,Math.min((container.current?.closest('.location-full')?.querySelector('.location-sheet')?.getBoundingClientRect().height??0)+40,instance.getSize().y-140))],maxZoom:current.some(point=>(point.accuracy??0)>500)?12:15,animate:false});fitted=true;}
+        if(current.length&&(fit||!fitted||signature!==ids)){
+          const dockHeight=container.current?.closest('.location-full')?.querySelector('.map-dock')?.getBoundingClientRect().height??0;
+          const bottomPadding=Math.max(48,Math.min(dockHeight+36,instance.getSize().y-104));
+          instance.fitBounds(bounds,{paddingTopLeft:[48,60],paddingBottomRight:[48,bottomPadding],maxZoom:current.some(point=>(point.accuracy??0)>500)?12:15,animate:false});
+          fitted=true;
+        }
         if(!current.length){instance.setView([20,0],2);fitted=false;}
         signature=ids;
       };

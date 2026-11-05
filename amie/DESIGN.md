@@ -14,4 +14,4 @@ Photo sharing opens a camera viewfinder with a centered shutter, a small gallery
 
 Mobile Messages uses a full conversation: compact back/partner header, scrollable bubbles, and a composer above the keyboard. The app header and large title are hidden; bottom navigation hides while composing. Scrolling stays inside the conversation and preserves older messages while reading.
 
-The Map tab uses a full-screen muted street map, a blue own-location dot, and a purple partner pin. A compact draggable sheet shows distance and sharing controls, with search and accuracy details in the expanded view. The OpenStreetMap attribution stays visible above the sheet. Map appearance defaults to Light and has Dark and System options under Us → Preferences. Search stays on the device.
+The Map tab uses a full-screen street map, a blue own-location dot, a purple partner pin, and a floating recenter button. A translucent, draggable search sheet shows distance and opens to location details and sharing controls. OpenStreetMap attribution sits above the sheet. Map appearance defaults to Light, with Dark and System under Us → Preferences. Search stays on the device.
