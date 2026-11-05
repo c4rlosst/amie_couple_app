@@ -1,73 +1,139 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
-import type {Map as LeafletMap,Marker,Circle} from 'leaflet';
-import {Navigation,LoaderCircle,MapPin} from 'lucide-react';
-import {mapLongitude,type MapPoint} from '../lib/location';
-import 'leaflet/dist/leaflet.css';
 
-export default function SharedMap({points,focusRequest}:{points:MapPoint[];focusRequest?:{id:string;version:number}|null}){
-  const container=useRef<HTMLDivElement>(null);const map=useRef<LeafletMap|null>(null);
-  const latest=useRef(points);latest.current=points;
-  const update=useRef<((points:MapPoint[],fit?:boolean,focusId?:string)=>void)|null>(null);
-  const [ready,setReady]=useState(false);const [error,setError]=useState('');const [tilesFailed,setTilesFailed]=useState(false);
-  useEffect(()=>{
-    let disposed=false;let observer:ResizeObserver|undefined;
-    void import('leaflet').then(L=>{
-      if(disposed||!container.current)return;
-      const instance=L.map(container.current,{zoomControl:false,scrollWheelZoom:false,attributionControl:false,worldCopyJump:true});map.current=instance;
-      L.control.zoom({position:'topright'}).addTo(instance);
-      const tiles=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,keepBuffer:1}).addTo(instance);
-      tiles.on('tileerror',()=>{if(!disposed)setTilesFailed(true);});tiles.on('tileload',()=>{if(!disposed)setTilesFailed(false);});
-      const connection=L.polyline([],{className:'map-connection',weight:2,dashArray:'5 7',interactive:false}).addTo(instance);
-      const layers=L.layerGroup().addTo(instance);let signature='';let fitted=false;
-      const pins=new Map<string,{marker:Marker;circle:Circle;label:string}>();
-      update.current=(current,fit=false,focusId)=>{
-        if(focusId&&!current.some(point=>point.id===focusId))focusId=undefined;
-        const ids=current.map(p=>p.id).join(':');const anchor=current[0]?.longitude??0;
-        for(const [id,pin] of pins)if(!current.some(point=>point.id===id)){layers.removeLayer(pin.marker);layers.removeLayer(pin.circle);pins.delete(id);}
-        const bounds=L.latLngBounds([]);
-        const positions=current.map(point=>L.latLng(point.latitude,mapLongitude(point.longitude,anchor)));
-        connection.setLatLngs(positions.length===2?positions:[]);
-        for(const [index,point] of current.entries()){
-          const position=positions[index];const color='#6947dc';
-          const label=point.name;let pin=pins.get(point.id);
-          if(!pin||pin.label!==label){
-            if(pin){layers.removeLayer(pin.marker);layers.removeLayer(pin.circle);}
-            const element=document.createElement('div');element.className=`map-person-pin ${point.own?'own':'partner'}`;
-            const initials=document.createElement('span');initials.textContent=label.trim().split(/\s+/).slice(0,2).map(word=>word[0]).join('').toUpperCase();element.appendChild(initials);
-            const tooltip=document.createElement('span');tooltip.textContent=label;
-            const marker=L.marker(position,{icon:L.divIcon({className:'map-person-marker',html:element,iconSize:point.own?[18,18]:[32,32],iconAnchor:point.own?[9,9]:[16,36]}),title:label,alt:`${label}'s last shared location`}).addTo(layers);
-            if(!point.own)marker.bindTooltip(tooltip.innerHTML,{permanent:true,direction:'top',offset:[0,-40],className:'map-person-label'});
-            const circle=L.circle(position,{radius:Math.min(20000000,Math.max(1,point.accuracy??0)),color,fillColor:color,fillOpacity:.08,weight:1,interactive:false}).addTo(layers);
-            marker.getElement()?.setAttribute('aria-label',`${label}'s last shared location`);
-            pin={marker,circle,label};pins.set(point.id,pin);
-          }
-          pin.marker.setLatLng(position);pin.circle.setLatLng(position).setRadius(Math.min(20000000,Math.max(1,point.accuracy??0))).setStyle({opacity:point.accuracy===null?0:1,fillOpacity:point.accuracy===null?0:.08});if(!focusId||point.id===focusId)bounds.extend(position);
-        }
-        if(current.length&&(fit||!fitted||signature!==ids)){
-          const dockHeight=container.current?.closest('.location-full')?.querySelector('.map-dock')?.getBoundingClientRect().height??0;
-          const height=instance.getSize().y;
-          const topPadding=Math.min(132,Math.floor(height/3));
-          const bottomPadding=Math.max(0,Math.min(dockHeight+36,height-topPadding-60));
-          instance.fitBounds(bounds,{paddingTopLeft:[40,topPadding],paddingBottomRight:[40,bottomPadding],maxZoom:current.some(point=>(point.accuracy??0)>500)?12:15,animate:false});
-          fitted=true;
-        }
-        if(!current.length){instance.setView([20,0],2);fitted=false;}
-        signature=ids;
-      };
-      update.current(latest.current,true);
-      observer=new ResizeObserver(()=>instance.invalidateSize({pan:false}));observer.observe(container.current);
-      setReady(true);
-    }).catch(()=>{if(!disposed)setError('The map could not load. Please reopen this page to try again.');});
-    return()=>{disposed=true;observer?.disconnect();map.current?.remove();map.current=null;update.current=null;};
-  },[]);
-  useEffect(()=>{update.current?.(points);},[points]);
-  useEffect(()=>{if(ready&&focusRequest)update.current?.(latest.current,true,focusRequest.id==='all'?undefined:focusRequest.id);},[focusRequest,ready]);
+import {useEffect, useRef, useState} from 'react';
+import {load, type Annotation, type Map as AppleMap, type MapKit} from '@apple/mapkit-loader';
+import {LoaderCircle, MapPin, Navigation} from 'lucide-react';
+import type {MapPoint} from '../lib/location';
+
+const token = import.meta.env?.VITE_MAPKIT_TOKEN?.trim() ?? '';
+export const mapKitConfigured = Boolean(token);
+
+let kitPromise: Promise<MapKit> | undefined;
+function loadAppleMaps() {
+  kitPromise ??= load({libraries: ['full-map']}).then(kit => new Promise<MapKit>((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      kit.removeEventListener('configuration-change', onReady);
+      kit.removeEventListener('error', onError);
+    };
+    const onReady = () => { cleanup(); resolve(kit); };
+    const onError = () => { cleanup(); reject(new Error('Apple Maps could not initialize.')); };
+    const timer = setTimeout(onError, 15000);
+
+    kit.addEventListener('configuration-change', onReady, {once: true});
+    kit.addEventListener('error', onError, {once: true});
+    try {
+      kit.init({authorizationCallback: done => done(token)});
+    } catch {
+      onError();
+    }
+  }));
+  return kitPromise;
+}
+
+type FocusRequest = {id: string; version: number} | null;
+type Props = {points: MapPoint[]; dark: boolean; focusRequest?: FocusRequest};
+
+export default function SharedMap({points, dark, focusRequest}: Props) {
+  const container = useRef<HTMLDivElement>(null);
+  const [map, setMap] = useState<{kit: MapKit; instance: AppleMap} | null>(null);
+  const [failed, setFailed] = useState(false);
+  const annotations = useRef(new Map<string, Annotation>());
+  const lastPoints = useRef('');
+  const fitted = useRef('');
+  const color = dark ? 'dark' : 'light';
+
+  useEffect(() => {
+    let active = true;
+    let instance: AppleMap | undefined;
+    let kit: MapKit | undefined;
+    const onError = () => { if (active) setFailed(true); };
+    const timer = setTimeout(onError, 20000);
+
+    void loadAppleMaps().then(loadedKit => {
+      if (!active || !container.current) return;
+      kit = loadedKit;
+      kit.addEventListener('error', onError);
+      instance = new kit.Map(container.current, {
+        mapType: kit.MapType.Standard,
+        showsMapTypeControl: true,
+        showsCompass: kit.FeatureVisibility.Adaptive,
+        showsZoomControl: window.matchMedia('(pointer: fine)').matches,
+        showsUserLocationControl: false,
+        showsUserLocation: false,
+      });
+      clearTimeout(timer);
+      setFailed(false);
+      setMap({kit, instance});
+    }).catch(onError);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      kit?.removeEventListener('error', onError);
+      instance?.destroy();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (map) map.instance.colorScheme = color === 'dark' ? map.kit.ColorScheme.Dark : map.kit.ColorScheme.Light;
+  }, [map, color]);
+
+  useEffect(() => {
+    if (!map) return;
+    const signature = JSON.stringify(points);
+    if (signature === lastPoints.current) return;
+    lastPoints.current = signature;
+    const {kit, instance} = map;
+    const next = new Map<string, Annotation>();
+    const accuracy = [];
+    for (const point of points) {
+      const coordinate = new kit.Coordinate(point.latitude, point.longitude);
+      const tint = point.own ? '#007aff' : '#af52de';
+      const pin = point.own ? new kit.Annotation(coordinate, () => {
+        const dot = document.createElement('div');
+        dot.className = 'apple-location-dot';
+        dot.setAttribute('aria-label', 'Your last shared location');
+        return dot;
+      }, {title: 'You'}) : new kit.MarkerAnnotation(coordinate, {title: point.name, color: tint});
+      next.set(point.id, pin);
+      if (point.accuracy && point.accuracy < 20000000) {
+        accuracy.push(new kit.CircleOverlay(coordinate, point.accuracy, {
+          enabled: false,
+          style: new kit.Style({fillColor: tint, fillOpacity: 0.08, strokeColor: tint, strokeOpacity: 0.3}),
+        }));
+      }
+    }
+    annotations.current = next;
+    instance.annotations = [...next.values()];
+    instance.overlays = accuracy;
+    const ids = [...next.keys()].join(':');
+    if (ids && ids !== fitted.current) fitMap(map, [...next.values()]);
+    fitted.current = ids;
+  }, [map, points]);
+
+  useEffect(() => {
+    if (!map || !focusRequest) return;
+    const pin = annotations.current.get(focusRequest.id);
+    fitMap(map, pin ? [pin] : [...annotations.current.values()]);
+  }, [map, focusRequest]);
+
+  const recenter = points.find(point => point.own) ?? points[0];
   return <div className="shared-map-wrap">
-    <div ref={container} className="shared-map" role="region" aria-label="Map of your last shared locations"/>
-    {!ready&&!error&&<div className="map-loading" role="status"><LoaderCircle size={22} className="spin"/>Loading map…</div>}
-    {error&&<div className="map-loading" role="alert"><MapPin size={24}/>{error}</div>}
-    {ready&&points.length>0&&<button type="button" className="map-fit" onClick={()=>update.current?.(latest.current,true,latest.current.find(point=>point.own)?.id)} aria-label={points.some(point=>point.own)?'Center on your saved location':'Center on your partner’s saved location'}><Navigation size={20}/></button>}
-    {tilesFailed&&<div className="map-tile-error" role="status">Map tiles are unavailable. Location details are still shown below.</div>}
+    <div ref={container} className="shared-map" role="region" aria-label="Apple Maps showing your last shared locations"/>
+    {!map && !failed && <div className="map-loading" role="status"><LoaderCircle size={22} className="spin"/>Loading Apple Maps…</div>}
+    {failed && <div className="map-loading" role="alert"><MapPin size={24}/>Apple Maps couldn’t load. You can open saved locations from the details below.</div>}
+    {map && !failed && recenter && <button type="button" className="map-fit" aria-label={recenter.own ? 'Center on your saved location' : 'Center on your partner’s saved location'} onClick={() => {
+      const pin = annotations.current.get(recenter.id);
+      if (pin) fitMap(map, [pin]);
+    }}><Navigation size={21}/></button>}
   </div>;
+}
+
+function fitMap({kit, instance}: {kit: MapKit; instance: AppleMap}, pins: Annotation[]) {
+  if (pins.length) instance.showItems(pins, {
+    animate: false,
+    minimumSpan: new kit.CoordinateSpan(0.008, 0.008),
+    padding: new kit.Padding(40, 36, 44, 36),
+  });
 }

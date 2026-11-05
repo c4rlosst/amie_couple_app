@@ -1,13 +1,14 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {ArrowUpRight,ChevronRight,ChevronDown,MapPin,Navigation,ShieldCheck,Search,Focus} from 'lucide-react';
-import SharedMap from './shared-map';
+import SharedMap, {mapKitConfigured} from './shared-map';
 import {distanceMetres,formatDistance,locationAge,locationPoint,type SharedLocation} from '../lib/location';
 
-type Props={me?:SharedLocation;partner?:SharedLocation|null;watching:boolean;busy:boolean;onShare:()=>void;onStop:()=>void;onOpenMap?:()=>void;full?:boolean;mapAllowed:boolean;onMapAllowed:(value:boolean)=>void};
-export default function LocationPanel({me,partner,watching,busy,onShare,onStop,onOpenMap,full=false,mapAllowed,onMapAllowed}:Props){
+type Props={me?:SharedLocation;partner?:SharedLocation|null;watching:boolean;busy:boolean;onShare:()=>void;onStop:()=>void;onOpenMap?:()=>void;full?:boolean;dark?:boolean;mapAllowed:boolean;onMapAllowed:(value:boolean)=>void};
+export default function LocationPanel({me,partner,watching,busy,onShare,onStop,onOpenMap,full=false,dark=false,mapAllowed,onMapAllowed}:Props){
   const [expanded,setExpanded]=useState(false);const [query,setQuery]=useState('');const search=useRef<HTMLInputElement>(null);
   const [focusRequest,setFocusRequest]=useState<{id:string;version:number}|null>(null);
+  const showMap=mapKitConfigured&&mapAllowed;
   function locate(id:string){search.current?.blur();setQuery('');setExpanded(false);setFocusRequest(previous=>({id,version:(previous?.version??0)+1}));}
   const drag=useRef<number|null>(null);
   const dragged=useRef(false);
@@ -21,24 +22,17 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
   const points=useMemo(()=>[own,other].filter((point):point is NonNullable<typeof point>=>!!point),[own,other]);
   const distance=own&&other?distanceMetres(own,other):null;
   const people=[{member:me,point:own,label:'You',own:true},{member:partner,point:other,label:partner?.name||'Your person',own:false}].filter(person=>!full||!query||`${person.label} ${person.member?.name||''}`.toLowerCase().includes(query.toLowerCase()));
-  return <section className={`location-panel ${full ? `location-full${mapAllowed ? '' : ' map-awaiting-tiles'}` : ''}`} aria-label="Shared locations">
+  return <section className={`location-panel ${full?'location-full':''}`} aria-label="Shared locations">
     {!full&&<div className="section-heading"><h2>Location</h2>{onOpenMap&&<button className="text-button" onClick={onOpenMap}>View map<ChevronRight size={16}/></button>}</div>}
-    {full&&(mapAllowed?<>
-      <SharedMap points={points} focusRequest={focusRequest}/>
-      <header className="map-header">
-        <h2>Our map</h2>
-        <form className="map-people-search" onSubmit={event=>{event.preventDefault();const first=people.find(person=>person.point);if(first?.point)locate(first.point.id);}}>
-          <Search size={17}/><input ref={search} type="search" aria-label="Find a person on the map" placeholder="Find a person" value={query} onChange={event=>setQuery(event.target.value)}/>
-        </form>
-      </header>
-    </>:<div className="map-consent">
+    {full&&(showMap?<SharedMap points={points} dark={dark} focusRequest={focusRequest}/>:<div className="map-consent">
       <MapPin size={26}/>
-      <h3>Your shared map</h3>
-      <small>OpenStreetMap receives your IP address and the map area you view. Names and pins stay in Amie.</small>
-      <button className="button secondary" onClick={()=>onMapAllowed(true)}>Load map</button>
+      <h3>Apple Maps</h3>
+      {mapKitConfigured?<>
+        <small>Loading the map connects to Apple and requests the area you view. Amie draws your saved pins on the map.</small>
+        <button className="button secondary" onClick={()=>onMapAllowed(true)}>Load Apple Maps</button>
+      </>:<small>{points.length?'Open a saved location in Apple Maps using the links below.':'Share a location to open it in Apple Maps.'}</small>}
     </div>)}
     <div className={full?'map-dock':'location-summary'}>
-    {full&&mapAllowed&&<div className="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors</div>}
     <div className={full?'location-sheet':undefined}>
     {full&&<>
       <button type="button" className="location-sheet-toggle" aria-expanded={expanded} aria-controls="map-location-details"
@@ -54,26 +48,31 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
         onClick={event=>{if(!dragged.current||event.detail===0)showDetails(!expanded);dragged.current=false;}}>
         <span className="map-sheet-grip" aria-hidden="true"><span/></span>
         <span className="map-sheet-summary">
-          <span className="map-summary-icon"><MapPin size={17}/></span>
-          <span className="map-summary-label"><strong>{watching?'Sharing my location':'Shared locations'}</strong>{distance!==null&&<small>Straight-line distance</small>}</span>
+          <span className="map-summary-label">{watching?'Sharing my location':'Our map'}</span>
           {distance!==null&&<strong className="map-distance">{formatDistance(distance)} apart</strong>}
           <ChevronDown size={15} className={expanded?'expanded':''}/>
         </span>
       </button>
+      {showMap&&<form className="map-people-search" onSubmit={event=>{event.preventDefault();const first=people.find(person=>person.point);if(first?.point)locate(first.point.id);}}>
+        <Search size={17}/><input ref={search} type="search" aria-label="Find a person on the map" placeholder="Find a person" value={query} onFocus={()=>setExpanded(true)} onChange={event=>setQuery(event.target.value)}/>
+      </form>}
     </>}
     {!full&&distance!==null&&<div className="location-distance"><strong>About {formatDistance(distance)} apart</strong><span>Between your last shared locations · straight-line distance</span></div>}
-    <div className="location-people">{people.map(person=><div className="location-person" key={person.own?'you':'partner'}>
-      <button className="location-person-target" type="button" disabled={!full||!mapAllowed||!person.point} aria-label={`Show ${person.label} on map`} onPointerDown={event=>event.preventDefault()} onClick={()=>person.point&&locate(person.point.id)}><span className={`location-person-dot ${person.own?'own':'partner'}`} aria-hidden="true"/>
+    <div id={full?'map-location-details':undefined}>
+    {full&&expanded&&distance!==null&&<p className="map-distance-note">Straight-line distance between saved locations.</p>}
+    <div className="location-people" hidden={full&&showMap&&!expanded}>{people.map(person=><div className="location-person" key={person.own?'you':'partner'}>
+      <button className="location-person-target" type="button" disabled={!full||!showMap||!person.point} aria-label={`Show ${person.label} on map`} onPointerDown={event=>event.preventDefault()} onClick={()=>person.point&&locate(person.point.id)}><span className={`location-person-dot ${person.own?'own':'partner'}`} aria-hidden="true"/>
       <div><h3>{person.label}</h3><p>{person.point?locationAge(person.point.updatedAt,now):person.member?'No location shared':'Not connected yet'}</p>{person.point&&(!full||expanded)&&<small>{now-person.point.updatedAt>=300000?'May be out of date · ':''}{person.point.accuracy===null?'Accuracy unavailable':`Accuracy about ${formatDistance(person.point.accuracy)}`}</small>}</div></button>
-      {person.point&&(!full||expanded)&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Maps`}><ArrowUpRight size={19}/></a>}
+      {person.point&&<a className="icon-button" href={`https://maps.apple.com/?ll=${person.point.latitude},${person.point.longitude}&q=Shared%20location`} target="_blank" rel="noreferrer" aria-label={`Open ${person.label}'s location in Apple Maps`}><ArrowUpRight size={19}/></a>}
     </div>)}{!people.length&&<p role="status" className="map-no-results">No matching person. Try your name or your partner’s name.</p>}</div>
-    <div id={full?'map-location-details':undefined} hidden={full&&!expanded}>
-    {full&&mapAllowed&&points.length>1&&<button className="text-button map-show-both" onPointerDown={event=>event.preventDefault()} onClick={()=>locate('all')}><Focus size={16}/>Show both locations</button>}
+    <div hidden={full&&!expanded}>
+    {full&&showMap&&points.length>1&&<button className="text-button map-show-both" onPointerDown={event=>event.preventDefault()} onClick={()=>locate('all')}><Focus size={16}/>Show both locations</button>}
     <div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>
     {!watching&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
     {(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
     <p className="location-explainer"><ShieldCheck size={15}/>Updates only while Amie is open. Stopping removes your saved location.</p>
-    {full&&mapAllowed&&<button className="text-button hide-map" onClick={()=>{showDetails(false);onMapAllowed(false);}}>Hide map</button>}
+    {full&&showMap&&<button className="text-button hide-map" onClick={()=>{showDetails(false);onMapAllowed(false);}}>Hide map</button>}
+    </div>
     </div>
     </div>
     </div>
