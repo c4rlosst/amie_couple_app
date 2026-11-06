@@ -5,13 +5,16 @@ import {Camera, Images, LoaderCircle, RotateCcw, SwitchCamera} from 'lucide-reac
 
 type Props = {photo:File|null; onPhoto:(photo:File|null)=>void; busy:boolean};
 type Phase = 'starting'|'live'|'unavailable';
+type Facing = 'environment'|'user';
+type CameraChoice = {facing:Facing;explicit:boolean};
 
 export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   const videoRef=useRef<HTMLVideoElement>(null);
   const galleryRef=useRef<HTMLInputElement>(null);
   const cameraRef=useRef<HTMLInputElement>(null);
   const mounted=useRef(false);
-  const [facing,setFacing]=useState<'environment'|'user'>('environment');
+  const [camera,setCamera]=useState<CameraChoice>({facing:'environment',explicit:false});
+  const lastCamera=useRef<CameraChoice|null>(null);
   const [actualFacing,setActualFacing]=useState('environment');
   const [phase,setPhase]=useState<Phase>('starting');
   const [retry,setRetry]=useState(0);
@@ -21,6 +24,8 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   const [cameraMessage,setCameraMessage]=useState('');
   const [preview,setPreview]=useState('');
   const disabled=busy||capturing;
+  const nextFacing=(phase==='live'?actualFacing:camera.facing)==='user'?'environment':'user';
+  const nextCamera=nextFacing==='environment'?'Rear':'Front';
 
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   useEffect(()=>{
@@ -49,27 +54,44 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
       setPhase('starting');setCameraMessage('');
       try {
         if(!navigator.mediaDevices?.getUserMedia)throw new Error('unsupported');
-        stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1440}}});
+        const constraints={width:{ideal:1920},height:{ideal:1440}};
+        try {
+          stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...constraints,facingMode:{exact:camera.facing}}});
+        } catch(cause) {
+          if(camera.explicit||disposed||!(cause instanceof DOMException)||!['OverconstrainedError','NotFoundError'].includes(cause.name))throw cause;
+          stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...constraints,facingMode:{ideal:camera.facing}}});
+        }
         // Permission can resolve after the sheet closes or the app goes into the background.
         if(disposed||document.visibilityState==='hidden'){stop();return;}
         if(!video){stop();return;}
-        setActualFacing(stream.getVideoTracks()[0]?.getSettings().facingMode||facing);
+        setActualFacing(stream.getVideoTracks()[0]?.getSettings().facingMode||camera.facing);
         video.srcObject=stream;
         await video.play();
-        if(!disposed)setPhase('live');
+        if(!disposed){lastCamera.current=camera;setPhase('live');}
       } catch(cause) {
         stop();
         if(disposed)return;
+        const unavailable=cause instanceof DOMException&&['OverconstrainedError','NotFoundError'].includes(cause.name);
+        const cameraError=`The ${camera.facing==='environment'?'rear':'front'} camera is unavailable.`;
+        if(camera.explicit&&unavailable&&lastCamera.current&&lastCamera.current!==camera){
+          setError(cameraError);
+          setCamera(lastCamera.current);
+          return;
+        }
         setPhase('unavailable');
-        setCameraMessage(cause instanceof DOMException&&cause.name==='NotAllowedError'
-          ? 'Allow camera access to use the live preview, or take a photo with your phone’s camera.'
-          : 'Use your phone’s camera, or open your photo library.');
+        if(cause instanceof DOMException&&cause.name==='NotAllowedError'){
+          setCameraMessage('Allow camera access to use the live preview, or take a photo with your phone’s camera.');
+        }else if(camera.explicit&&unavailable){
+          setCameraMessage(`${cameraError} Switch cameras or open your photo library.`);
+        }else{
+          setCameraMessage('Use your phone’s camera, or open your photo library.');
+        }
       }
     };
     void open();
     document.addEventListener('visibilitychange',hide);window.addEventListener('pagehide',stop);
     return()=>{disposed=true;stop();document.removeEventListener('visibilitychange',hide);window.removeEventListener('pagehide',stop);};
-  },[photo,facing,retry,visible]);
+  },[photo,camera,retry,visible]);
 
   function choose(file:File|undefined) {
     if(!file)return;
@@ -114,10 +136,10 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
       <div className="camera-controls">
         <button type="button" className="camera-tool camera-gallery" aria-label="Open photo library" title="Open photo library" disabled={disabled} onClick={()=>galleryRef.current?.click()}><Images size={24}/></button>
         {photo?<button type="button" className="camera-retake" onClick={()=>{setError('');onPhoto(null);}} disabled={disabled}><RotateCcw size={18}/>Retake</button>:<button type="button" className="camera-shutter" aria-label="Take photo" disabled={disabled||!visible||phase==='starting'} onClick={()=>phase==='live'?void capture():cameraRef.current?.click()}><span>{capturing?<LoaderCircle className="spin" size={26}/>:phase==='unavailable'?<Camera size={25}/>:null}</span></button>}
-        {!photo&&phase==='live'?<button type="button" className="camera-tool" aria-label={`Switch to ${actualFacing==='user'?'back':'front'} camera`} disabled={disabled} onClick={()=>setFacing(actualFacing==='user'?'environment':'user')}><SwitchCamera size={24}/></button>:<span className="camera-control-spacer"/>}
+        {!photo&&<button type="button" className="camera-tool camera-switch" aria-label={`Switch to ${nextCamera.toLowerCase()} camera`} disabled={disabled||!visible||phase==='starting'} onClick={()=>{setError('');setPhase('starting');setCamera({facing:nextFacing,explicit:true});}}><SwitchCamera size={20}/><span>{nextCamera}</span></button>}
       </div>
       <input ref={galleryRef} hidden type="file" accept="image/*" aria-label="Photo library" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
-      <input ref={cameraRef} hidden type="file" accept="image/*" capture="environment" aria-label="Phone camera" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
+      <input ref={cameraRef} hidden type="file" accept="image/*" capture={camera.facing} aria-label="Phone camera" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
     </div>
     {error&&<p className="camera-error" role="alert">{error}</p>}
   </>;
