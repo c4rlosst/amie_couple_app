@@ -33,7 +33,7 @@ export default function LocationPanel({me,partner,watching,busy,onShare,onStop,o
     {full&&<div className="location-sharing"><span className={`sharing-indicator ${watching?'on':''}`}/><p>{watching?own?'Sharing while Amie is open':'Finding your location…':own?'Your last location is saved':'Your location is not shared'}</p></div>}
     {(!full||!watching)&&<button className="button secondary location-share-button" onClick={onShare} disabled={busy||watching}><Navigation size={17}/>{own?'Update my location':'Share my location'}</button>}
     {full&&(watching||own)&&<button className="text-button stop-sharing" onClick={onStop} disabled={busy}>Stop & remove my location</button>}
-    {full&&<p className="location-explainer"><ShieldCheck size={15}/>Updates only while Amie is open. Stopping removes your saved location.</p>}
+    {full&&<p className="location-explainer"><ShieldCheck size={15}/>Updates about every five minutes while Amie is open. Stopping removes your saved location.</p>}
     {full&&mapAllowed&&<button className="text-button hide-map" onClick={()=>{showDetails(false);onMapAllowed(false);}}>Hide map</button>}
   </>;
   return <section className={`location-panel ${full?'location-full':''}`} aria-label="Shared locations">

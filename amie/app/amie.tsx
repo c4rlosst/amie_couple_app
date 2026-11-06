@@ -20,6 +20,7 @@ type Data = {me:Member;partner:Member|null;space:{id:string;anniversary:string|n
 type SyncData = Omit<Data,'messages'> & {messages:ChatMessage[]|null;messageVersion?:string;error?:string};
 type Tab = 'home'|'messages'|'moments'|'map'|'us';
 const loveCooldown=3*60*60*1000;
+const locationInterval=5*60*1000;
 function tabFromHash(){return window.location.hash==='#map'?'map':window.location.hash==='#messages'?'messages':null;}
 const statusLabel:Record<string,string> = {around:'Around',busy:'A little busy',sleeping:'Going to sleep'};
 function ago(time:number|null|undefined) { if (!time) return 'No update yet'; const minutes = Math.max(0,Math.floor((Date.now()-time)/60000)); return minutes<1?'just now':minutes<60?`${minutes}m ago`:minutes<1440?`${Math.floor(minutes/60)}h ago`:new Date(time).toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
@@ -48,11 +49,13 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
     for(const url of photoUrls.current)URL.revokeObjectURL(url);
   },[]);
   const [draft,setDraft] = useState(''); const [caption,setCaption] = useState(''); const [photo,setPhoto] = useState<File|null>(null);
-  const [watching,setWatching] = useState(false); const watcher = useRef<number|null>(null); const sharingSession=useRef(0); const lastLocation=useRef(0); const locationRequest=useRef<Promise<unknown>|null>(null); const [anniversary,setAnniversary] = useState(''); const messageList=useRef<HTMLDivElement>(null); const nearLatest=useRef(true); const scrollingChat=useRef(false);
+  const [locationConsent,setLocationConsent]=useState<string|null>(null); const sharingSession=useRef(0); const pendingFix=useRef<number|null>(null); const lastLocation=useRef(0); const savedLocation=useRef<number|null>(null); const locationRequest=useRef<Promise<unknown>|null>(null); const [anniversary,setAnniversary] = useState(''); const messageList=useRef<HTMLDivElement>(null); const nearLatest=useRef(true); const scrollingChat=useRef(false);
   const messages=data?.messages??[];
   const chatMessages=[...messages.filter(message=>!pendingPhotos.some(item=>item.id===message.id)),...pendingPhotos]
     .sort((a,b)=>a.created_at-b.created_at||a.id.localeCompare(b.id));
   const me=data?.me; const partner=data?.partner; const paired=!!data?.space;
+  const sharingKey=signedIn&&me&&data?.space?`amie.location.auto.v1.${me.id}.${data.space.id}`:null;
+  const watching=sharingKey!==null&&locationConsent===sharingKey;
   const loveKey=me?`amie.love.${me.id}`:null;
   const latestLove=data?.messages.findLast(message=>message.kind==='tap'&&message.sender_id===me?.id)?.created_at??0;
   const [sentLoveAt,setSentLoveAt]=useState(0);
@@ -134,7 +137,68 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
     const list=messageList.current;const latest=chatMessages.at(-1);
     if(list&&(nearLatest.current||latest?.sender_id===me?.id)){list.scrollTop=list.scrollHeight;nearLatest.current=true;}
   },[chatMessages.at(-1)?.id,tab,me?.id]);
-  useEffect(()=>()=>{if(watcher.current!==null)navigator.geolocation.clearWatch(watcher.current);},[]);
+  const updateLocation=useCallback(()=>{
+    if(!sharingKey||!navigator.geolocation||document.visibilityState!=='visible'||pendingFix.current!==null||locationRequest.current)return;
+    if(Date.now()-lastLocation.current<locationInterval)return;
+    const session=sharingSession.current;
+    const isCurrent=()=>session===sharingSession.current;
+    pendingFix.current=session;
+    lastLocation.current=Date.now();
+    navigator.geolocation.getCurrentPosition(position=>{
+      if(!isCurrent())return;
+      pendingFix.current=null;
+      if(document.visibilityState!=='visible'){lastLocation.current=0;return;}
+      const {latitude,longitude,accuracy}=position.coords;
+      locationRequest.current=act('location',{latitude,longitude,accuracy})
+        .catch(error=>{if(isCurrent())setError(error.message);})
+        .finally(()=>{locationRequest.current=null;});
+    },error=>{
+      if(!isCurrent())return;
+      pendingFix.current=null;
+      if(error.code===1){
+        try{localStorage.removeItem(sharingKey);}catch{}
+        setLocationConsent(null);
+        lastLocation.current=0;
+      }
+      if(document.visibilityState==='visible')setError(error.code===1
+        ?'Location access is off. Allow it in your browser settings, then try again.'
+        :'Your location is unavailable. Amie will try again while it’s open.');
+    },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+  },[act,sharingKey]);
+  useEffect(()=>{savedLocation.current=me?.location_at??null;},[me?.location_at]);
+  useEffect(()=>{
+    sharingSession.current++;
+    pendingFix.current=null;
+    lastLocation.current=0;
+    try{
+      const remembered=sharingKey&&localStorage.getItem(sharingKey)==='on';
+      if(remembered)lastLocation.current=Math.min(savedLocation.current??0,Date.now());
+      setLocationConsent(remembered?sharingKey:null);
+    }catch{setLocationConsent(null);}
+    return()=>{sharingSession.current++;pendingFix.current=null;};
+  },[sharingKey]);
+  useEffect(()=>{
+    if(!watching||!navigator.geolocation)return;
+    let timer:number|undefined;
+    const pause=()=>window.clearTimeout(timer);
+    const schedule=()=>{
+      pause();
+      if(document.visibilityState!=='visible')return;
+      updateLocation();
+      const remaining=lastLocation.current+locationInterval-Date.now();
+      timer=window.setTimeout(schedule,Math.max(1000,remaining));
+    };
+    schedule();
+    document.addEventListener('visibilitychange',schedule);
+    window.addEventListener('pageshow',schedule);
+    window.addEventListener('pagehide',pause);
+    return()=>{
+      pause();
+      document.removeEventListener('visibilitychange',schedule);
+      window.removeEventListener('pageshow',schedule);
+      window.removeEventListener('pagehide',pause);
+    };
+  },[watching,updateLocation]);
   useEffect(()=>{if(!modal)return;const previous=document.activeElement as HTMLElement|null;const dialog=document.querySelector<HTMLDialogElement>('dialog');dialog?.showModal(); const esc=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();setModal(null);}};document.addEventListener('keydown',esc);return()=>{document.removeEventListener('keydown',esc);dialog?.close();previous?.focus();};},[modal]);
   function requireSpace() { if(!signedIn){onSignIn();return false;} if(!paired){setModal('setup');return false;} return true; }
   async function setup(e:React.FormEvent) { e.preventDefault();await run(async()=>{const result=await act(join?'join':'create',{name,code});if(result.code){setInvite(result.code);setModal('invite');}else{setModal(null);setNotice('You’re connected. Welcome to your little space.');}}); }
@@ -142,11 +206,23 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
   function openInvite() { run(async()=>{const result=await act('invite');setInvite(result.code||'');setModal('invite');}); }
   async function copyInvite() {try{await navigator.clipboard.writeText(invite.match(/.{1,4}/g)?.join('-')||invite);setCopied(true);setTimeout(()=>setCopied(false),2000);}catch{setError('Press and hold the code to copy it.');} }
   function startLocation() {
-    if(!requireSpace())return;if(!navigator.geolocation){setError('This browser does not support location sharing.');return;}
-    if(watcher.current!==null)return;const session=++sharingSession.current;setWatching(true);lastLocation.current=0;
-    watcher.current=navigator.geolocation.watchPosition(pos=>{if(session!==sharingSession.current||document.visibilityState!=='visible'||Date.now()-lastLocation.current<30000)return;lastLocation.current=Date.now();locationRequest.current=(locationRequest.current||Promise.resolve()).catch(()=>{}).then(()=>{if(session!==sharingSession.current)return;return act('location',{latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy});}).catch(e=>setError(e.message));},e=>{if(watcher.current!==null)navigator.geolocation.clearWatch(watcher.current);watcher.current=null;setWatching(false);setError(e.code===1?'Location access is off. Allow it in Safari settings, then try again.':'Your location is unavailable. Move closer to a window and try again.');},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+    if(!requireSpace()||!sharingKey)return;
+    if(!navigator.geolocation){setError('This browser does not support location sharing.');return;}
+    try{localStorage.setItem(sharingKey,'on');}catch{}
+    setLocationConsent(sharingKey);
+    updateLocation();
   }
-  async function stopLocation() { sharingSession.current++;if(watcher.current!==null)navigator.geolocation.clearWatch(watcher.current);watcher.current=null;setWatching(false);await locationRequest.current?.catch(()=>{});await run(()=>act('stop-location'),'Your saved location has been removed.'); }
+  async function stopLocation() {
+    await run(async()=>{
+      sharingSession.current++;
+      pendingFix.current=null;
+      lastLocation.current=0;
+      if(sharingKey)try{localStorage.removeItem(sharingKey);}catch{}
+      setLocationConsent(null);
+      await locationRequest.current;
+      await act('stop-location');
+    },'Your saved location has been removed.');
+  }
   async function sendMessage(e:React.FormEvent) {e.preventDefault();if(!draft.trim()||!requireSpace())return;const body=draft;await run(async()=>{await act('message',{body,id:crypto.randomUUID()});setDraft('');});}
   function releasePhotoPreview(id:string){
     const url=sentPreviews[id];
@@ -223,7 +299,7 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
       {tab==='map'&&<LocationPanel me={me} partner={partner} watching={watching} busy={busy} onShare={startLocation} onStop={stopLocation} mapAllowed={mapAllowed} onMapAllowed={allowMap} dark={dark} full/>}
       {tab==='messages'&&<section className="panel conversation"><div className="conversation-heading"><button type="button" className="icon-button conversation-back" aria-label="Back to Home" onClick={()=>matchMedia('(prefers-reduced-motion: reduce)').matches?setTab('home'):setLeavingMessages(true)}><ChevronLeft size={26}/></button><Avatar id={partner?.id} version={partner?.avatar_version} name={partner?.name||'Your person'} partner small/><div className="conversation-person"><h2>{partner?.name||'Your person'}</h2><span>{partner?`Last seen in Amie ${ago(partner.last_seen)}`:'Your conversation starts here'}</span></div><LockKeyhole size={17}/></div><div ref={messageList} className="message-list" role="log" tabIndex={0} aria-label="Conversation" aria-live="polite" aria-relevant="additions" onScroll={event=>{const list=event.currentTarget;if(!scrollingChat.current)nearLatest.current=list.scrollHeight-list.scrollTop-list.clientHeight<=8;}}><div className="message-thread">{!chatMessages.length&&<div className="empty-state"><MessageCircle size={35}/><h3>Say hello.</h3><p>Send a message or photo to your person.</p>{!paired&&<button className="button primary" onClick={()=>requireSpace()}>Connect with my person</button>}</div>}{data&&<ChatMessages messages={chatMessages} userId={me?.id} onRetryPhoto={uploadPhoto} previews={sentPreviews} onPhotoReady={releasePhotoPreview}/>}</div></div><form className="message-composer" onSubmit={sendMessage}><button type="button" className="icon-button" aria-label="Send a photo" onClick={openPhoto}><Plus size={22}/></button><div className="composer-field"><input aria-label="Message" value={draft} onChange={e=>setDraft(e.target.value)} maxLength={4000} placeholder="Message your partner…"/><button className="send-button" aria-label="Send message" disabled={busy||!draft.trim()}><ArrowUp size={21}/></button></div></form><p className="conversation-note">Updates while open. Latest 200 messages.</p></section>}
       {tab==='moments'&&<MomentsCalendar spaceId={data?.space?.id} recent={photos} userId={me?.id} partnerName={partner?.name}/>}
-      {tab==='us'&&<div className="settings-grid"><section className="panel story-panel"><span className="story-heart">♡</span><h2>{me?.name||'You'} & {partner?.name||'your person'}</h2><p>{days?<><strong>{days}</strong> days of us.</>:'Every story has a first day.'}</p>{paired?<form onSubmit={e=>{e.preventDefault();run(()=>act('anniversary',{date:anniversary}),'Your first day, remembered.');}}><label htmlFor="anniversary">Our first day</label><div className="field-action"><input type="date" id="anniversary" required max={new Date().toLocaleDateString('en-CA')} value={anniversary||data?.space?.anniversary||''} onChange={e=>setAnniversary(e.target.value)}/><button className="button secondary" disabled={busy}>Save</button></div></form>:<button className="button primary" onClick={()=>requireSpace()}>Start our story</button>}</section><section className="panel settings-panel"><h2>Preferences</h2>{signedIn&&me&&<ProfilePhotoEditor member={me} onSaved={async message=>{await refresh();setNotice(message);}}/>}{paired&&<form onSubmit={e=>{e.preventDefault();run(()=>act('profile',{name}),'Your name has been updated.');}}><label htmlFor="name">What should we call you?</label><div className="field-action"><input id="name" placeholder={me?.name||'Your name'} value={name} onChange={e=>setName(e.target.value)} maxLength={40} required/><button className="button secondary" disabled={busy}>Save</button></div></form>}<AppearanceSettings appearance={appearance} onChange={saveAppearance}/>{signedIn&&<NotificationSettings/>}{paired&&!partner&&<button className="settings-link" onClick={openInvite}><Users size={19}/><span>Invite your partner<small>Get a fresh code, valid for 24 hours.</small></span><ChevronRight size={18}/></button>}<button className="settings-link" onClick={()=>setModal('install')}><Download size={19}/><span>Add Amie to Home Screen<small>A little closer, one tap away.</small></span><ChevronRight size={18}/></button><button className="settings-link" onClick={()=>run(refresh)}><RefreshCw size={19}/><span>Refresh our space</span></button>{signedIn&&<button className="settings-link" onClick={()=>run(onSignOut)}><LogOut size={19}/><span>Sign out</span></button>}</section><section className="panel privacy-panel"><LockKeyhole size={21}/><div><h3>Sharing, on your terms.</h3><p>Locations update only while Amie is open and sharing is enabled on this device. Your last shared location stays visible until you remove it. Bedtime is a status you choose, not sleep detection. “Last seen” means last seen in Amie.</p>{(watching||me?.location_at)&&<button className="text-button" onClick={stopLocation}>Stop sharing & remove my location</button>}<p>Messages and photos are access-controlled, but aren’t end-to-end encrypted. Invite codes connect two Amie accounts. Only the two members can access your shared space.</p></div></section></div>}
+      {tab==='us'&&<div className="settings-grid"><section className="panel story-panel"><span className="story-heart">♡</span><h2>{me?.name||'You'} & {partner?.name||'your person'}</h2><p>{days?<><strong>{days}</strong> days of us.</>:'Every story has a first day.'}</p>{paired?<form onSubmit={e=>{e.preventDefault();run(()=>act('anniversary',{date:anniversary}),'Your first day, remembered.');}}><label htmlFor="anniversary">Our first day</label><div className="field-action"><input type="date" id="anniversary" required max={new Date().toLocaleDateString('en-CA')} value={anniversary||data?.space?.anniversary||''} onChange={e=>setAnniversary(e.target.value)}/><button className="button secondary" disabled={busy}>Save</button></div></form>:<button className="button primary" onClick={()=>requireSpace()}>Start our story</button>}</section><section className="panel settings-panel"><h2>Preferences</h2>{signedIn&&me&&<ProfilePhotoEditor member={me} onSaved={async message=>{await refresh();setNotice(message);}}/>}{paired&&<form onSubmit={e=>{e.preventDefault();run(()=>act('profile',{name}),'Your name has been updated.');}}><label htmlFor="name">What should we call you?</label><div className="field-action"><input id="name" placeholder={me?.name||'Your name'} value={name} onChange={e=>setName(e.target.value)} maxLength={40} required/><button className="button secondary" disabled={busy}>Save</button></div></form>}<AppearanceSettings appearance={appearance} onChange={saveAppearance}/>{signedIn&&<NotificationSettings/>}{paired&&!partner&&<button className="settings-link" onClick={openInvite}><Users size={19}/><span>Invite your partner<small>Get a fresh code, valid for 24 hours.</small></span><ChevronRight size={18}/></button>}<button className="settings-link" onClick={()=>setModal('install')}><Download size={19}/><span>Add Amie to Home Screen<small>A little closer, one tap away.</small></span><ChevronRight size={18}/></button><button className="settings-link" onClick={()=>run(refresh)}><RefreshCw size={19}/><span>Refresh our space</span></button>{signedIn&&<button className="settings-link" onClick={()=>run(onSignOut)}><LogOut size={19}/><span>Sign out</span></button>}</section><section className="panel privacy-panel"><LockKeyhole size={21}/><div><h3>Sharing, on your terms.</h3><p>While Amie is open, your location updates about every five minutes if sharing is enabled on this device. Your last shared location stays visible until you remove it. Bedtime is a status you choose, not sleep detection. “Last seen” means last seen in Amie.</p>{(watching||me?.location_at)&&<button className="text-button" onClick={stopLocation}>Stop sharing & remove my location</button>}<p>Messages and photos are access-controlled, but aren’t end-to-end encrypted. Invite codes connect two Amie accounts. Only the two members can access your shared space.</p></div></section></div>}
       <footer className="app-footer"><Heart size={12}/> A little space. A lot of us.</footer>
     </main></div>
     <nav className="bottom-nav" aria-label="Mobile navigation">{nav.map(item=><button aria-current={tab===item.id?'page':undefined} className={tab===item.id?'active':''} key={item.id} onClick={()=>setTab(item.id)}><item.icon size={21}/><span>{item.label}</span></button>)}</nav>
