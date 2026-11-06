@@ -89,7 +89,6 @@
 .camera-shutter:active > span { background:#d1d1d6; }
 .camera-shutter:disabled { opacity:.45; }
 .camera-retake { display:flex; align-items:center; gap:7px; min-height:46px; padding:10px 16px; background:#262628e6; color:#fff; border-radius:24px; font-size:14px; }
-.camera-switch { align-content:center; gap:2px; font-size:10px; line-height:1; }
 .camera-error { margin-top:12px; font-size:13px; line-height:1.5; color:var(--danger); }
 .photo-camera button:focus-visible { outline:3px solid #fff; outline-offset:3px; }
 html { -webkit-text-size-adjust:100%; scroll-padding-block:24px; }

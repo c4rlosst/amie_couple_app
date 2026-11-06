@@ -25,7 +25,7 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   const [preview,setPreview]=useState('');
   const disabled=busy||capturing;
   const nextFacing=(phase==='live'?actualFacing:camera.facing)==='user'?'environment':'user';
-  const nextCamera=nextFacing==='environment'?'Rear':'Front';
+  const nextCamera=nextFacing==='environment'?'rear':'front';
 
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   useEffect(()=>{
@@ -136,7 +136,7 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
       <div className="camera-controls">
         <button type="button" className="camera-tool camera-gallery" aria-label="Open photo library" title="Open photo library" disabled={disabled} onClick={()=>galleryRef.current?.click()}><Images size={24}/></button>
         {photo?<button type="button" className="camera-retake" onClick={()=>{setError('');onPhoto(null);}} disabled={disabled}><RotateCcw size={18}/>Retake</button>:<button type="button" className="camera-shutter" aria-label="Take photo" disabled={disabled||!visible||phase==='starting'} onClick={()=>phase==='live'?void capture():cameraRef.current?.click()}><span>{capturing?<LoaderCircle className="spin" size={26}/>:phase==='unavailable'?<Camera size={25}/>:null}</span></button>}
-        {!photo&&<button type="button" className="camera-tool camera-switch" aria-label={`Switch to ${nextCamera.toLowerCase()} camera`} disabled={disabled||!visible||phase==='starting'} onClick={()=>{setError('');setPhase('starting');setCamera({facing:nextFacing,explicit:true});}}><SwitchCamera size={20}/><span>{nextCamera}</span></button>}
+        {!photo&&<button type="button" className="camera-tool" aria-label={`Switch to ${nextCamera} camera`} disabled={disabled||!visible||phase==='starting'} onClick={()=>{setError('');setPhase('starting');setCamera({facing:nextFacing,explicit:true});}}><SwitchCamera size={24}/></button>}
       </div>
       <input ref={galleryRef} hidden type="file" accept="image/*" aria-label="Photo library" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
       <input ref={cameraRef} hidden type="file" accept="image/*" capture={camera.facing} aria-label="Phone camera" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
