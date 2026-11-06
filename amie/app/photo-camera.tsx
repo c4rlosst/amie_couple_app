@@ -10,6 +10,7 @@ type CameraChoice = {facing:Facing;explicit:boolean};
 
 export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   const videoRef=useRef<HTMLVideoElement>(null);
+  const frozenFrame=useRef<HTMLCanvasElement>(null);
   const galleryRef=useRef<HTMLInputElement>(null);
   const cameraRef=useRef<HTMLInputElement>(null);
   const mounted=useRef(false);
@@ -20,6 +21,7 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   const [retry,setRetry]=useState(0);
   const [visible,setVisible]=useState(true);
   const [capturing,setCapturing]=useState(false);
+  const [switching,setSwitching]=useState(false);
   const [error,setError]=useState('');
   const [cameraMessage,setCameraMessage]=useState('');
   const [preview,setPreview]=useState('');
@@ -45,7 +47,9 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
     const video=videoRef.current;
     let disposed=false;
     let stream:MediaStream|null=null;
+    let settleTimer:number|undefined;
     const stop=()=>{
+      window.clearTimeout(settleTimer);
       stream?.getTracks().forEach(track=>track.stop());
       if(video?.srcObject===stream)video.srcObject=null;
     };
@@ -67,7 +71,13 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
         setActualFacing(stream.getVideoTracks()[0]?.getSettings().facingMode||camera.facing);
         video.srcObject=stream;
         await video.play();
-        if(!disposed){lastCamera.current=camera;setPhase('live');}
+        if(disposed)return;
+        // Let Safari settle the new video geometry before revealing the stream.
+        settleTimer=window.setTimeout(()=>{
+          lastCamera.current=camera;
+          setPhase('live');
+          setSwitching(false);
+        },220);
       } catch(cause) {
         stop();
         if(disposed)return;
@@ -79,6 +89,7 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
           return;
         }
         setPhase('unavailable');
+        setSwitching(false);
         if(cause instanceof DOMException&&cause.name==='NotAllowedError'){
           setCameraMessage('Allow camera access to use the live preview, or take a photo with your phone’s camera.');
         }else if(camera.explicit&&unavailable){
@@ -92,6 +103,28 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
     document.addEventListener('visibilitychange',hide);window.addEventListener('pagehide',stop);
     return()=>{disposed=true;stop();document.removeEventListener('visibilitychange',hide);window.removeEventListener('pagehide',stop);};
   },[photo,camera,retry,visible]);
+
+  function switchCamera() {
+    const video=videoRef.current;
+    const frame=frozenFrame.current;
+    if(phase==='live'&&video?.videoWidth&&video.videoHeight&&frame){
+      frame.width=video.videoWidth;
+      frame.height=video.videoHeight;
+      const context=frame.getContext('2d');
+      if(context){
+        if(actualFacing==='user'){context.translate(frame.width,0);context.scale(-1,1);}
+        try{
+          context.drawImage(video,0,0);
+          setSwitching(true);
+        }catch{
+          setSwitching(false);
+        }
+      }
+    }
+    setError('');
+    setPhase('starting');
+    setCamera({facing:nextFacing,explicit:true});
+  }
 
   function choose(file:File|undefined) {
     if(!file)return;
@@ -128,15 +161,16 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   return <>
     <div className="photo-camera">
       <div className="camera-frame">
-        {photo?<img className="camera-photo" src={preview||undefined} alt="Photo ready to share"/>:<video ref={videoRef} className={actualFacing==='user'?'camera-mirrored':''} autoPlay muted playsInline aria-label="Camera preview"/>}
-        {!photo&&(!visible||phase!=='live')&&<div className="camera-placeholder" role="status">
+        {photo?<img className="camera-photo" src={preview||undefined} alt="Photo ready to share"/>:<video ref={videoRef} className={actualFacing==='user'?'camera-mirrored':''} data-ready={visible&&(phase==='live'||switching)} autoPlay muted playsInline aria-label="Camera preview"/>}
+        {!photo&&<canvas ref={frozenFrame} className="camera-frozen-frame" data-visible={visible&&switching} aria-hidden="true"/>}
+        {!photo&&(!visible||(phase!=='live'&&!switching))&&<div className="camera-placeholder" role="status">
           {phase==='starting'&&visible?<><LoaderCircle className="spin" size={28}/><p>Opening camera…</p></>:<><Camera size={32}/><p>{visible?cameraMessage:'Camera paused'}</p>{visible&&<button type="button" className="camera-retry" onClick={()=>setRetry(value=>value+1)} disabled={disabled}>Try live camera again</button>}</>}
         </div>}
       </div>
       <div className="camera-controls">
         <button type="button" className="camera-tool camera-gallery" aria-label="Open photo library" title="Open photo library" disabled={disabled} onClick={()=>galleryRef.current?.click()}><Images size={24}/></button>
         {photo?<button type="button" className="camera-retake" onClick={()=>{setError('');onPhoto(null);}} disabled={disabled}><RotateCcw size={18}/>Retake</button>:<button type="button" className="camera-shutter" aria-label="Take photo" disabled={disabled||!visible||phase==='starting'} onClick={()=>phase==='live'?void capture():cameraRef.current?.click()}><span>{capturing?<LoaderCircle className="spin" size={26}/>:phase==='unavailable'?<Camera size={25}/>:null}</span></button>}
-        {!photo&&<button type="button" className="camera-tool" aria-label={`Switch to ${nextCamera} camera`} disabled={disabled||!visible||phase==='starting'} onClick={()=>{setError('');setPhase('starting');setCamera({facing:nextFacing,explicit:true});}}><SwitchCamera size={24}/></button>}
+        {!photo&&<button type="button" className="camera-tool" aria-label={`Switch to ${nextCamera} camera`} disabled={disabled||!visible||phase==='starting'} onClick={switchCamera}><SwitchCamera size={24}/></button>}
       </div>
       <input ref={galleryRef} hidden type="file" accept="image/*" aria-label="Photo library" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
       <input ref={cameraRef} hidden type="file" accept="image/*" capture={camera.facing} aria-label="Phone camera" onChange={event=>{choose(event.target.files?.[0]);event.target.value='';}}/>
