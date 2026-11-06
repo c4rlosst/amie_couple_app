@@ -9,6 +9,7 @@ function fixture() {
   const sqlite=new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../drizzle/0000_parched_annihilus.sql',import.meta.url),'utf8'));
   sqlite.exec(readFileSync(new URL('../drizzle/0002_profile_photos.sql',import.meta.url),'utf8'));
+  sqlite.exec(readFileSync(new URL('../drizzle/0005_chat_revision.sql',import.meta.url),'utf8'));
   const wrap=(sql,args=[])=>({
     bind(...values){return wrap(sql,values);},
     async first(){return sqlite.prepare(sql).get(...args)||null;},
@@ -26,6 +27,33 @@ test('pairing is one-use, limited to two, and invite hashes never leak',async()=
 test('expired and replaced invitation codes are rejected',async()=>{const {call,sqlite}=fixture();const c=await call('a',{action:'create',name:'Alex'});const fresh=await call('a',{action:'invite'});assert.equal((await call('b',{action:'join',name:'Bea',code:c.code})).status,400);sqlite.exec('UPDATE spaces SET invite_expires = 0');assert.equal((await call('b',{action:'join',name:'Bea',code:fresh.code})).status,400);});
 test('messages sync between partners, deduplicate retries, and stay out of other spaces',async()=>{const {call,paired}=fixture();await paired();const id=crypto.randomUUID();await call('a',{action:'message',id,body:'Hello ♡'});await call('a',{action:'message',id,body:'Hello ♡'});const b=await call('b');assert.equal(b.messages.length,1);assert.equal(b.messages[0].body,'Hello ♡');await call('c',{action:'create',name:'Cam'});assert.equal((await call('c')).messages.length,0);assert.equal((await call('d',{action:'message',id:crypto.randomUUID(),body:'No access'})).status,403);});
 test('mood, bedtime and heartbeat are separate from device inactivity',async()=>{const {call,paired}=fixture();await paired();await call('a',{action:'checkin',mood:'tired',status:'sleeping'});await call('a',{action:'heartbeat'});const b=await call('b');assert.equal(b.partner.status,'sleeping');assert.equal(b.partner.mood,'tired');assert.ok(b.partner.last_seen);assert.equal((await call('a',{action:'checkin',mood:'invalid'})).status,400);});
+test('chat polls skip history only when the current space revision matches',async()=>{
+  const {call,paired,env,sqlite}=fixture();
+  await paired();
+  const first=await call('b');
+  const poll=async(version,uid='b')=>{
+    const response=await handleAmie(new Request(`https://amie.test/api/amie?messageVersion=${encodeURIComponent(version)}`),env,uid);
+    assert.equal(response.status,200);
+    return response.json();
+  };
+  await call('a',{action:'checkin',status:'busy'});
+  const unchanged=await poll(first.messageVersion);
+  assert.equal(unchanged.messages,null);
+  assert.equal(unchanged.partner.status,'busy');
+  const id=crypto.randomUUID();
+  await call('a',{action:'message',id,body:'A new message'});
+  const changed=await poll(first.messageVersion);
+  assert.deepEqual(changed.messages.map(message=>message.id),[id]);
+  await call('a',{action:'message',id,body:'A retry'});
+  assert.equal((await poll(changed.messageVersion)).messages,null);
+  sqlite.prepare('UPDATE messages SET body = ?, created_at = ? WHERE id = ?').run('Edited',1,id);
+  const edited=await poll(changed.messageVersion);
+  assert.equal(edited.messages[0].body,'Edited');
+  sqlite.prepare('DELETE FROM messages WHERE id = ?').run(id);
+  assert.deepEqual((await poll(edited.messageVersion)).messages,[]);
+  await call('c',{action:'create',name:'Cam'});
+  assert.deepEqual((await poll(first.messageVersion,'c')).messages,[]);
+});
 test('location validation and removal apply to the current user only',async()=>{const {call,paired}=fixture();await paired();assert.equal((await call('a',{action:'location',latitude:200,longitude:120,accuracy:5})).status,400);await call('a',{action:'location',latitude:14.6,longitude:121,accuracy:8});assert.equal((await call('b')).partner.latitude,14.6);await call('a',{action:'stop-location'});const b=await call('b');assert.equal(b.partner.latitude,null);assert.equal(b.partner.location_at,null);});
 test('anniversary rejects future and impossible dates',async()=>{const {call,paired}=fixture();await paired();assert.equal((await call('a',{action:'anniversary',date:'2099-01-01'})).status,400);assert.equal((await call('a',{action:'anniversary',date:'2025-02-30'})).status,400);assert.equal((await call('a',{action:'anniversary',date:'2025-02-14'})).status,200);assert.equal((await call('b')).space.anniversary,'2025-02-14');});
 test('photo uploads enforce type and photo retrieval enforces space membership',async()=>{const {call,paired,env}=fixture();await paired();const form=new FormData();form.set('photo',new Blob([new Uint8Array([255,216,255,224,1,2,3])],{type:'image/jpeg'}),'photo.jpg');form.set('caption','Our moment');const upload=await handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:form}),env,'a');assert.equal(upload.status,200);const {id}=await upload.json();assert.equal((await getPhoto(env,'b',id)).status,200);await call('c',{action:'create',name:'Cam'});assert.equal((await getPhoto(env,'c',id)).status,404);assert.equal((await getPhoto(env,null,id)).status,401);const invalid=new FormData();invalid.set('photo',new Blob(['<svg/>'],{type:'image/svg+xml'}),'bad.svg');assert.equal((await handleAmie(new Request('https://amie.test/api/amie',{method:'POST',body:invalid}),env,'a')).status,400);});

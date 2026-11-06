@@ -9,7 +9,6 @@ function inviteCode() { return Array.from(crypto.getRandomValues(new Uint8Array(
 function text(value: unknown, max: number) { return typeof value === 'string' ? value.trim().slice(0,max) : ''; }
 function database(env: Bindings) { if (!env.DB) throw new Problem(503, 'Shared storage is not connected yet. Please try again shortly.'); return env.DB; }
 async function member(db: D1Database, uid: string) { return db.prepare('SELECT * FROM members WHERE id = ?').bind(uid).first<Member>(); }
-async function requireMember(db: D1Database, uid: string) { const me = await member(db,uid); if (!me?.space_id) throw new Problem(403,'Create or join your space first.'); return me; }
 function sameOrigin(request: Request) {
   const origin = request.headers.get('origin');
   if (!allowedRequest(request)) throw new Problem(403,'Please use Amie directly to make changes.');
@@ -19,9 +18,16 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
   try {
     if (!uid) throw new Problem(401,'Sign in to open your private space.');
     const db = database(env); const now = Date.now();
-    await db.prepare('INSERT INTO members (id,name,status_at,last_seen) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(uid,text(displayName,40)||'You',now,now).run();
+    if (request.method !== 'GET') {
+      sameOrigin(request);
+      if (Number(request.headers.get('content-length')||0) > 9*1024*1024) throw new Problem(413,'Choose a photo smaller than 8 MB.');
+    }
+    let me = await member(db,uid);
+    if (!me) {
+      await db.prepare('INSERT INTO members (id,name,status_at,last_seen) VALUES (?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(uid,text(displayName,40)||'You',now,now).run();
+      me = (await member(db,uid))!;
+    }
     if (request.method === 'GET') {
-      const me = (await member(db,uid))!;
       const params = new URL(request.url).searchParams;
       if (params.has('momentsFrom') || params.has('momentsTo')) {
         const from = Number(params.get('momentsFrom'));
@@ -32,20 +38,23 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
         return json({photos:photos.results});
       }
       if (!me.space_id) return json({me,partner:null,space:null,messages:[]});
-      const [partner,space,messages] = await Promise.all([
+      const [partner,spaceRow] = await Promise.all([
         db.prepare('SELECT * FROM members WHERE space_id = ? AND id != ?').bind(me.space_id,uid).first(),
-        db.prepare('SELECT id,anniversary,created_at FROM spaces WHERE id = ?').bind(me.space_id).first(),
-        db.prepare('SELECT id,sender_id,kind,body,created_at FROM (SELECT id,sender_id,kind,body,created_at FROM messages WHERE space_id = ? ORDER BY created_at DESC,id DESC LIMIT 200) ORDER BY created_at,id').bind(me.space_id).all(),
+        db.prepare('SELECT id,anniversary,created_at,message_revision FROM spaces WHERE id = ?').bind(me.space_id).first<{id:string;anniversary:string|null;created_at:number;message_revision:number}>(),
       ]);
-      return json({me,partner,space,messages:messages.results});
+      if (!spaceRow) return json({me,partner,space:null,messages:[]});
+      const {message_revision,...space}=spaceRow;
+      const messageVersion=`${space.id}:${message_revision}`;
+      if (params.get('messageVersion')===messageVersion) return json({me,partner,space,messageVersion,messages:null});
+      // Read the revision before the history. An insert between the reads causes a refresh on the next poll.
+      const messages=await db.prepare('SELECT id,sender_id,kind,body,created_at FROM messages WHERE space_id = ? ORDER BY created_at DESC,id DESC LIMIT 200').bind(me.space_id).all();
+      return json({me,partner,space,messageVersion,messages:messages.results.reverse()});
     }
-    sameOrigin(request);
-    if (Number(request.headers.get('content-length')||0) > 9*1024*1024) throw new Problem(413,'Choose a photo smaller than 8 MB.');
     if (request.headers.get('content-type')?.includes('multipart/form-data')) {
       if (!env.BUCKET) throw new Problem(503,'Photo storage is not connected yet.');
       const form = await request.formData(); const file = form.get('photo');
       const avatar = form.get('purpose') === 'avatar';
-      const me = avatar ? (await member(db,uid))! : await requireMember(db,uid);
+      if (!avatar && !me.space_id) throw new Problem(403,'Create or join your space first.');
       check(file instanceof File && file.size > 0 && file.size <= 8*1024*1024,'Choose a photo smaller than 8 MB.');
       const photo = file as File; const bytes = new Uint8Array(await photo.arrayBuffer());
       const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
@@ -91,13 +100,11 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
     const body = await request.json() as Record<string,unknown>;
     const action = body.action;
     if(action==='remove-avatar'){
-      const me=(await member(db,uid))!;
       await db.prepare('UPDATE members SET avatar_version=NULL WHERE id=? AND avatar_version IS ?').bind(uid,me.avatar_version).run();
       if(me.avatar_version&&env.BUCKET)await env.BUCKET.delete(`avatars/${uid}/${me.avatar_version}`).catch(()=>console.warn('Old profile photo cleanup deferred'));
       return json({ok:true});
     }
     if (action === 'create') {
-      const me = (await member(db,uid))!;
       check(!me.space_id,'You already have a space.'); const name = text(body.name,40); check(name,'Add your name first.');
       const code = inviteCode(); const id = crypto.randomUUID();
       await db.batch([
@@ -108,7 +115,7 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
       return json({ok:true,code});
     }
     if (action === 'join') {
-      const me = (await member(db,uid))!; check(!me.space_id,'You already have a space.');
+      check(!me.space_id,'You already have a space.');
       const name = text(body.name,40); const code = text(body.code,60).replace(/[\s-]/g,'').toUpperCase();
       check(name && /^[A-F0-9]{20}$/.test(code),'Add your name and the full invite code.');
       const digest = await hash(code);
@@ -120,7 +127,7 @@ export async function handleAmie(request: Request, env: Bindings, uid: string | 
       check((await member(db,uid))?.space_id,'This invite has expired or was already used. Ask for a new one.');
       return json({ok:true});
     }
-    const me = await requireMember(db,uid);
+    if (!me.space_id) throw new Problem(403,'Create or join your space first.');
     if (action === 'invite') {
       const code = inviteCode();
       const result = await db.prepare('UPDATE spaces SET invite_hash = ?,invite_expires = ? WHERE id = ? AND owner_id = ? AND partner_id IS NULL').bind(await hash(code),now+86400000,me.space_id,uid).run();

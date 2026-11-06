@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { authRoute, account, cors } from '../lib/account-auth.ts';
 import { handleAmie } from '../lib/service.ts';
 function fixture(){
-  const sqlite=new DatabaseSync(':memory:');for(const file of ['0000_parched_annihilus.sql','0001_funny_molten_man.sql','0002_profile_photos.sql'])sqlite.exec(readFileSync(new URL(`../drizzle/${file}`,import.meta.url),'utf8'));
+  const sqlite=new DatabaseSync(':memory:');for(const file of ['0000_parched_annihilus.sql','0001_funny_molten_man.sql','0002_profile_photos.sql','0005_chat_revision.sql'])sqlite.exec(readFileSync(new URL(`../drizzle/${file}`,import.meta.url),'utf8'));
   const prepare=(sql,args=[])=>({bind(...a){return prepare(sql,a);},async first(){return sqlite.prepare(sql).get(...args)||null;},async run(){const r=sqlite.prepare(sql).run(...args);return {meta:{changes:Number(r.changes)}};},async all(){return {results:sqlite.prepare(sql).all(...args)};}});
   const env={DB:{prepare,async batch(statements){sqlite.exec('BEGIN');try{const r=[];for(const s of statements)r.push(await s.run());sqlite.exec('COMMIT');return r;}catch(e){sqlite.exec('ROLLBACK');throw e;}}}};
   async function call(body,token,origin='https://c4rlosst.github.io'){const request=new Request('https://backend.test/api/auth',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin,...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify(body)});const response=await authRoute(request,env);return {status:response.status,headers:response.headers,...await response.json()};}

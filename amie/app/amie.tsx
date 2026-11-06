@@ -17,6 +17,7 @@ import { Heart, House, MessageCircle, Images, Users, Moon, Sun, MapPin, ArrowUpR
 type Member = { avatar_version:string|null; id:string; name:string; mood:string; status:string; status_at:number; last_seen:number; latitude:number|null; longitude:number|null; accuracy:number|null; location_at:number|null };
 
 type Data = {me:Member;partner:Member|null;space:{id:string;anniversary:string|null;created_at:number}|null;messages:ChatMessage[]};
+type SyncData = Omit<Data,'messages'> & {messages:ChatMessage[]|null;messageVersion?:string;error?:string};
 type Tab = 'home'|'messages'|'moments'|'map'|'us';
 const loveCooldown=3*60*60*1000;
 function tabFromHash(){return window.location.hash==='#map'?'map':window.location.hash==='#messages'?'messages':null;}
@@ -75,8 +76,25 @@ export default function Amie({signedIn,onSignIn,onSignOut,appearanceSettings}:{s
     window.addEventListener('pageshow',update);
     return()=>{clearTimeout(timer);document.removeEventListener('visibilitychange',update);window.removeEventListener('pageshow',update);};
   },[loveReturnsAt]);
-  const refresh = useCallback(async () => { if (!signedIn) return; const res=await apiFetch('/api/amie',{cache:'no-store'}); const result=await res.json() as Data & {error?:string}; if(!res.ok) throw new Error(result.error); setData(result); setError(''); },[signedIn]);
-  const act = useCallback(async (action:string, body:Record<string,unknown>={}, onSaved?:()=>void) => { const res=await apiFetch('/api/amie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})}); const result=await res.json() as {error?:string;code?:string}; if(!res.ok) throw new Error(result.error); onSaved?.(); await refresh(); return result; },[refresh]);
+  const chatCache=useRef<{version:string;messages:ChatMessage[]}|null>(null);
+  const nextSync=useRef(0);
+  const appliedSync=useRef(0);
+  const refresh = useCallback(async () => {
+    if (!signedIn) return;
+    const sync=++nextSync.current;
+    const cached=chatCache.current;
+    const path=cached?`/api/amie?messageVersion=${encodeURIComponent(cached.version)}`:'/api/amie';
+    const res=await apiFetch(path,{cache:'no-store'});
+    const {messages,messageVersion,error,...snapshot}=await res.json() as SyncData;
+    if(!res.ok) throw new Error(error);
+    if(sync<appliedSync.current)return;
+    const history=messages??cached?.messages??[];
+    appliedSync.current=sync;
+    chatCache.current=messageVersion?{version:messageVersion,messages:history}:null;
+    setData({...snapshot,messages:history});
+    setError('');
+  },[signedIn]);
+  const act = useCallback(async (action:string, body:Record<string,unknown>={}, onSaved?:()=>void) => { const res=await apiFetch('/api/amie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...body})}); const result=await res.json() as {error?:string;code?:string}; if(!res.ok) throw new Error(result.error); onSaved?.(); if(action!=='heartbeat')await refresh(); return result; },[refresh]);
   function sendLove(){
     if(!loveKey||Date.now()<loveReturnsAt)return;
     void run(()=>act('tap',{id:crypto.randomUUID()},()=>{
