@@ -105,10 +105,12 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
 
   return <>
     <div className="photo-camera">
-      {photo?<img className="camera-photo" src={preview||undefined} alt="Photo ready to share"/>:<video ref={videoRef} className={actualFacing==='user'?'camera-mirrored':''} autoPlay muted playsInline aria-label="Camera preview"/>}
-      {!photo&&(!visible||phase!=='live')&&<div className="camera-placeholder" role="status">
-        {phase==='starting'&&visible?<><LoaderCircle className="spin" size={28}/><p>Opening camera…</p></>:<><Camera size={32}/><p>{visible?cameraMessage:'Camera paused'}</p>{visible&&<button type="button" className="camera-retry" onClick={()=>setRetry(value=>value+1)} disabled={disabled}>Try live camera again</button>}</>}
-      </div>}
+      <div className="camera-frame">
+        {photo?<img className="camera-photo" src={preview||undefined} alt="Photo ready to share"/>:<video ref={videoRef} className={actualFacing==='user'?'camera-mirrored':''} autoPlay muted playsInline aria-label="Camera preview"/>}
+        {!photo&&(!visible||phase!=='live')&&<div className="camera-placeholder" role="status">
+          {phase==='starting'&&visible?<><LoaderCircle className="spin" size={28}/><p>Opening camera…</p></>:<><Camera size={32}/><p>{visible?cameraMessage:'Camera paused'}</p>{visible&&<button type="button" className="camera-retry" onClick={()=>setRetry(value=>value+1)} disabled={disabled}>Try live camera again</button>}</>}
+        </div>}
+      </div>
       <div className="camera-controls">
         <button type="button" className="camera-tool camera-gallery" aria-label="Open photo library" title="Open photo library" disabled={disabled} onClick={()=>galleryRef.current?.click()}><Images size={24}/></button>
         {photo?<button type="button" className="camera-retake" onClick={()=>{setError('');onPhoto(null);}} disabled={disabled}><RotateCcw size={18}/>Retake</button>:<button type="button" className="camera-shutter" aria-label="Take photo" disabled={disabled||!visible||phase==='starting'} onClick={()=>phase==='live'?void capture():cameraRef.current?.click()}><span>{capturing?<LoaderCircle className="spin" size={26}/>:phase==='unavailable'?<Camera size={25}/>:null}</span></button>}

@@ -73,14 +73,15 @@
 .conversation-back { display:none; }
 .composer-field { display:flex; align-items:center; flex:1; min-width:0; gap:8px; }
 .photo-form { margin-top:20px; }
-.photo-camera { position:relative; isolation:isolate; height:clamp(220px,46dvh,400px); overflow:hidden; border-radius:16px; background:#161618; color:#fff; }
-.photo-camera video, .photo-camera .camera-photo { display:block; width:100%; height:100%; object-fit:cover; }
-.photo-camera .camera-photo { object-fit:contain; padding-bottom:84px; }
+.photo-camera { display:grid; overflow:hidden; border-radius:16px; background:#161618; color:#fff; }
+.camera-frame { position:relative; min-height:0; height:clamp(140px,34dvh,320px); }
+.photo-camera video, .photo-camera .camera-photo { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover; }
+.photo-camera .camera-photo { object-fit:contain; }
 .photo-camera .camera-mirrored { transform:scaleX(-1); }
-.camera-placeholder { position:absolute; inset:0 0 88px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:24px; text-align:center; color:#e5e5ea; }
+.camera-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:12px 24px; text-align:center; color:#e5e5ea; }
 .camera-placeholder p { max-width:28ch; font-size:14px; line-height:1.6; }
 .camera-retry { min-height:44px; padding:8px 12px; border-radius:8px; font-size:13px; color:#fff; text-decoration:underline; text-underline-offset:3px; }
-.camera-controls { position:absolute; inset:auto 0 0; display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; padding:14px 16px; background:linear-gradient(transparent,#000a); }
+.camera-controls { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; align-items:center; padding:12px 16px; }
 .camera-tool { display:grid; place-items:center; width:46px; height:46px; justify-self:end; border-radius:50%; background:#262628c9; color:#fff; }
 .camera-gallery { justify-self:start; border:1px solid #ffffff4d; border-radius:12px; }
 .camera-shutter { display:grid; place-items:center; width:66px; height:66px; padding:4px; border:3px solid #fff; border-radius:50%; }
@@ -622,3 +623,29 @@ body:has(.screen-map) { position:fixed; inset:0; width:100%; overflow:hidden; }
 }
 @keyframes message-screen-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
 @keyframes message-screen-out { from { transform:translateX(0); } to { transform:translateX(100%); } }
+
+dialog.modal.camera-dialog {
+  inset:0;
+  margin:auto;
+  width:calc(100% - 32px);
+  max-width:520px;
+  height:min(780px,calc(var(--visible-height,100dvh) - 32px));
+  max-height:none;
+  border-radius:24px;
+  background:#000;
+  color:#fff;
+}
+.camera-dialog .modal-content { display:flex; flex-direction:column; min-height:100%; height:100%; padding:0; }
+.camera-dialog h2 { display:flex; align-items:center; min-height:64px; padding:0 64px 0 20px; font-size:18px; letter-spacing:-.3px; }
+.camera-dialog .close-modal { top:10px; right:12px; min-width:44px; min-height:44px; background:#262628; color:#fff; }
+.camera-dialog .photo-form { display:grid; grid-template-rows:minmax(0,1fr) auto; flex:1; min-height:0; margin:0; }
+.camera-dialog .photo-camera { grid-template-rows:minmax(0,1fr) auto; border-radius:0; background:#000; }
+.camera-dialog .camera-frame { align-self:center; width:100%; height:auto; max-height:100%; aspect-ratio:3 / 4; background:#161618; }
+.camera-dialog .camera-controls { padding:12px max(20px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(20px,env(safe-area-inset-left)); }
+.camera-dialog .camera-shutter { width:76px; height:76px; }
+.camera-dialog :is(.camera-error,.modal-error) { margin:0; padding:0 20px 12px; color:#ff9b93; }
+@media (max-width:600px) {
+  dialog.modal.camera-dialog { width:100%; height:var(--visible-height,100dvh); border-radius:0; }
+  .camera-dialog .modal-content { padding-top:env(safe-area-inset-top); }
+  .camera-dialog .close-modal { top:calc(10px + env(safe-area-inset-top)); }
+}
