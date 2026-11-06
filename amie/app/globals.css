@@ -74,14 +74,15 @@
 .composer-field { display:flex; align-items:center; flex:1; min-width:0; gap:8px; }
 .photo-form { margin-top:20px; }
 .photo-camera { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; overflow:hidden; border-radius:16px; background:#161618; color:#fff; }
-.camera-frame { position:relative; min-height:0; overflow:hidden; height:clamp(140px,34dvh,320px); }
+.camera-frame { position:relative; min-height:0; overflow:hidden; perspective:900px; height:clamp(140px,34dvh,320px); }
 .photo-camera video, .photo-camera .camera-photo, .camera-frozen-frame { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover; }
 .photo-camera .camera-photo { object-fit:contain; }
 .photo-camera .camera-mirrored { transform:scaleX(-1); }
-.photo-camera video { opacity:0; transition:opacity 180ms ease-out; }
+.photo-camera video { opacity:0; rotate:y 0deg; transition:opacity 180ms ease-out,rotate 240ms ease-out; }
 .photo-camera video[data-ready='true'] { opacity:1; }
-.camera-frozen-frame { opacity:0; pointer-events:none; transition:opacity 180ms ease-out; }
-.camera-frozen-frame[data-visible='true'] { opacity:1; transition:none; }
+.photo-camera video[data-switching='true'] { rotate:y 14deg; transition:none; }
+.camera-frozen-frame { opacity:0; rotate:y -14deg; pointer-events:none; transition:opacity 200ms ease-out,rotate 240ms ease-out; }
+.camera-frozen-frame[data-visible='true'] { opacity:1; rotate:y 0deg; transition:none; }
 .camera-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:12px 24px; text-align:center; color:#e5e5ea; }
 .camera-placeholder p { max-width:28ch; font-size:14px; line-height:1.6; }
 .camera-retry { min-height:44px; padding:8px 12px; border-radius:8px; font-size:13px; color:#fff; text-decoration:underline; text-underline-offset:3px; }

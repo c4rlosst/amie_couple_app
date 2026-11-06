@@ -90,9 +90,7 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
         }
         setPhase('unavailable');
         setSwitching(false);
-        if(cause instanceof DOMException&&cause.name==='NotAllowedError'){
-          setCameraMessage('Allow camera access to use the live preview, or take a photo with your phone’s camera.');
-        }else if(camera.explicit&&unavailable){
+        if(camera.explicit&&unavailable){
           setCameraMessage(`${cameraError} Switch cameras or open your photo library.`);
         }else{
           setCameraMessage('Use your phone’s camera, or open your photo library.');
@@ -161,7 +159,7 @@ export default function PhotoCamera({photo,onPhoto,busy}:Props) {
   return <>
     <div className="photo-camera">
       <div className="camera-frame">
-        {photo?<img className="camera-photo" src={preview||undefined} alt="Photo ready to share"/>:<video ref={videoRef} className={actualFacing==='user'?'camera-mirrored':''} data-ready={visible&&(phase==='live'||switching)} autoPlay muted playsInline aria-label="Camera preview"/>}
+        {photo?<img className="camera-photo" src={preview||undefined} alt="Photo ready to share"/>:<video ref={videoRef} className={actualFacing==='user'?'camera-mirrored':''} data-ready={visible&&(phase==='live'||switching)} data-switching={visible&&switching} autoPlay muted playsInline aria-label="Camera preview"/>}
         {!photo&&<canvas ref={frozenFrame} className="camera-frozen-frame" data-visible={visible&&switching} aria-hidden="true"/>}
         {!photo&&(!visible||(phase!=='live'&&!switching))&&<div className="camera-placeholder" role="status">
           {phase==='starting'&&visible?<><LoaderCircle className="spin" size={28}/><p>Opening camera…</p></>:<><Camera size={32}/><p>{visible?cameraMessage:'Camera paused'}</p>{visible&&<button type="button" className="camera-retry" onClick={()=>setRetry(value=>value+1)} disabled={disabled}>Try live camera again</button>}</>}
