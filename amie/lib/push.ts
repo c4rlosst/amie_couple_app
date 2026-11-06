@@ -7,6 +7,7 @@ type SubscriptionRow={id:string;account_id:string;endpoint:string;p256dh:string;
 type Notice={title:string;body:string;tag:string;tab?:'map'};
 const reply=(data:unknown,status=200)=>Response.json(data,{status});
 const tokens=new Map<string,{authorization:string;until:number}>();
+const retryablePushStatuses=new Set([429,500,502,503,504]);
 export function pushReady(env:PushEnv){return !!(env.VAPID_PUBLIC_KEY&&env.VAPID_PRIVATE_KEY&&env.VAPID_SUBJECT);}
 export function validEndpoint(value:unknown):value is string{
   if(typeof value!=='string'||value.length>2048)return false;
@@ -22,7 +23,18 @@ export async function sendPush(env:PushEnv,row:SubscriptionRow,notice:Notice,tra
   const cacheKey=`${env.VAPID_PUBLIC_KEY}:${new URL(row.endpoint).origin}`;const cached=tokens.get(cacheKey);
   if(cached&&cached.until>Date.now())payload.headers.authorization=cached.authorization;
   else{if(tokens.size>16)tokens.clear();tokens.set(cacheKey,{authorization:payload.headers.authorization,until:Date.now()+3600000});}
-  const response=await transport(row.endpoint,{...payload,redirect:'manual',signal:AbortSignal.timeout(8000)});
+  const deliver=()=>transport(row.endpoint,{...payload,redirect:'manual',signal:AbortSignal.timeout(8000)});
+  let response=await deliver();
+  if(retryablePushStatuses.has(response.status)){
+    const after=response.headers.get('Retry-After');
+    const delay=after===null?500:/^\d+$/.test(after)?Number(after)*1000:Date.parse(after)-Date.now();
+    // Retry one explicit rejection within the Worker’s delivery window.
+    if(Number.isFinite(delay)&&delay<=2000){
+      await response.body?.cancel().catch(()=>{});
+      await new Promise(resolve=>setTimeout(resolve,Math.max(0,delay)));
+      response=await deliver();
+    }
+  }
   if(response.status===404||response.status===410){await env.DB!.prepare('DELETE FROM push_subscriptions WHERE id=? AND account_id=?').bind(row.id,row.account_id).run();return false;}
   if(!response.ok)throw new Error(`Push provider returned ${response.status}`);
   return true;

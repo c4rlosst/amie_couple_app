@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import {Bell,LoaderCircle} from 'lucide-react';
 import {apiFetch,assetUrl} from '../lib/client-api';
-import {disableDeviceNotifications,pushRequest} from '../lib/device-notifications';
+import {disableDeviceNotifications,PushRequestError,pushRequest} from '../lib/device-notifications';
 
 function publicKey(value:string){return Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));}
 export default function NotificationSettings(){
@@ -40,13 +40,29 @@ export default function NotificationSettings(){
       await pushRequest({action:'subscribe',endpoint:subscription.endpoint,keys:data.keys});
       setEnabled(true);setNotice('Notifications are on for this device.');
     }catch(cause){
-      const stale=subscription||await registration.pushManager.getSubscription().catch(()=>null);
-      if(stale)await stale.unsubscribe().catch(()=>false);
+      if((cause instanceof DOMException&&cause.name==='InvalidStateError')||(cause instanceof PushRequestError&&cause.status===409)){
+        const stale=subscription||await registration.pushManager.getSubscription().catch(()=>null);
+        if(stale&&await stale.unsubscribe().catch(()=>false)){
+          setError('The old notification connection was removed. Tap Enable notifications again.');
+          return;
+        }
+      }
       setError(Notification.permission==='denied'?'Notifications were blocked. Allow them in your device settings to try again.':cause instanceof Error?cause.message:'Unable to enable notifications.');
     }finally{setBusy(false);}
   }
   async function disable(){setBusy(true);setError('');setNotice('');try{await disableDeviceNotifications();setEnabled(false);setNotice('Notifications are off for this device.');}catch{setEnabled(false);setError('Device notifications were stopped. Server cleanup will retry when the subscription expires.');}finally{setBusy(false);}}
-  async function test(){setBusy(true);setError('');setNotice('');try{const sub=await registration?.pushManager.getSubscription();if(!sub)throw new Error('Enable notifications again first.');await pushRequest({action:'test',endpoint:sub.endpoint});setNotice('Test sent. Check your notifications.');}catch(cause){setError(cause instanceof Error?cause.message:'Unable to send a test.');}finally{setBusy(false);}}
+  async function test(){
+    setBusy(true);setError('');setNotice('');
+    try{
+      const sub=await registration?.pushManager.getSubscription();
+      if(!sub){setEnabled(false);throw new Error('Enable notifications again first.');}
+      await pushRequest({action:'test',endpoint:sub.endpoint});
+      setNotice('Test accepted. Check Notification Center. If it’s missing, check your device’s notification and Focus settings.');
+    }catch(cause){
+      if(cause instanceof PushRequestError&&(cause.status===404||cause.status===410))setEnabled(false);
+      setError(cause instanceof Error?cause.message:'Unable to send a test.');
+    }finally{setBusy(false);}
+  }
   return <section className="notification-setting" aria-labelledby="notification-heading">
     <div className="notification-title"><Bell size={20}/><h3 id="notification-heading">Notifications</h3>{busy&&<LoaderCircle className="spin" size={16}/>}</div>
     <p>Messages, photos, little love taps, and nearby alerts when you both share a recent location. Text messages appear in notification previews.</p>

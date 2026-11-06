@@ -83,6 +83,29 @@ test('expired subscriptions are removed and test delivery is throttled per devic
   assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,0);
 });
 
+test('push delivery retries a temporary rejection once and respects longer rate limits',async()=>{
+  const {env,sqlite}=await fixture();const device=await subscription('retry');await register(env,'a',device);
+  const testPush=transport=>pushRoute(request({action:'test',endpoint:device.endpoint}),env,'a',transport);
+  const attempts=[];
+  const recovered=await testPush(async(_url,payload)=>{
+    attempts.push(payload);
+    return attempts.length===1?new Response(null,{status:503,headers:{'Retry-After':'0'}}):new Response(null,{status:201});
+  });
+  assert.equal(recovered.status,200);
+  assert.equal(attempts.length,2);
+  assert.equal(attempts[0].body,attempts[1].body);
+  assert.notEqual(attempts[0].signal,attempts[1].signal);
+
+  for(const [status,retryAfter,expected] of [[503,'0',2],[429,'60',1],[403,'0',1]]){
+    sqlite.exec('UPDATE push_subscriptions SET last_test_at=0');
+    let calls=0;
+    const failed=await testPush(async()=>{calls++;return new Response(null,{status,headers:{'Retry-After':retryAfter}});});
+    assert.equal(failed.status,502);
+    assert.equal(calls,expected);
+  }
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM push_subscriptions').get().n,1);
+});
+
 test('nearby alerts use fresh accurate fixes and send once per approach to the pair only',async()=>{
   const {env,sqlite}=await fixture();
   sqlite.exec("INSERT INTO spaces (id,owner_id,partner_id,created_at) VALUES ('pair','a','b',0); INSERT INTO members (id,space_id,name,status_at,last_seen) VALUES ('a','pair','Alex',0,0),('b','pair','Bea',0,0),('c',NULL,'C',0,0);");
